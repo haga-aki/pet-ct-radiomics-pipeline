@@ -20,20 +20,22 @@ DICOM_DIR = BASE_DIR / "raw_download"
 NIFTI_DIR = BASE_DIR / "nifti_images"
 SEG_DIR = BASE_DIR / "segmentations"
 
-# 対象臓器（デフォルト：胸部臓器）
+# 対象臓器（推奨：代表臓器セット）
+# 臓器サイズ・生理集積・PV問題を横断的にカバー
 ORGANS = [
-    # 肺葉
-    "lung_upper_lobe_left",
-    "lung_lower_lobe_left",
-    "lung_upper_lobe_right",
-    "lung_middle_lobe_right",
-    "lung_lower_lobe_right",
-    # 心血管系
-    "heart",
+    # 大臓器・安定
+    "liver",
+    "spleen",
+    # 中等度・生理集積あり
+    "kidney_left",
+    "kidney_right",
+    # 小臓器・PV影響あり
+    "adrenal_gland_left",
+    "adrenal_gland_right",
+    # 参照領域（blood pool）
     "aorta",
-    # 気道・消化管
-    "trachea",
-    "esophagus"
+    # 骨髄（代表）
+    "vertebrae_L1",
 ]
 
 

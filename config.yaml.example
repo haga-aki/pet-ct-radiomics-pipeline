@@ -7,21 +7,40 @@ modalities:
   - PET
 
 # 抽出する臓器（TotalSegmentatorの出力ラベルを使用）
-# 'all'を指定するとセグメンテーションされた全臓器を対象にします
-# 以下は胸部臓器のデフォルト設定
+# 'all' を指定するとセグメンテーションされた全臓器を対象にします
+# TotalSegmentatorは117の解剖学的構造に対応しています
+
+# 推奨：代表臓器セット（臓器サイズ・生理集積・PV問題を横断的にカバー）
 organs:
-  # 肺葉
-  - lung_upper_lobe_left
-  - lung_lower_lobe_left
-  - lung_upper_lobe_right
-  - lung_middle_lobe_right
-  - lung_lower_lobe_right
-  # 心血管系
-  - heart
+  # 大臓器・安定
+  - liver
+  - spleen
+  # 中等度・生理集積あり
+  - kidney_left
+  - kidney_right
+  # 小臓器・PV影響あり
+  - adrenal_gland_left
+  - adrenal_gland_right
+  # 参照領域（blood pool）
   - aorta
-  # 気道・消化管
-  - trachea
-  - esophagus
+  # 骨髄（代表）
+  - vertebrae_L1
+
+# 全臓器を対象にする場合:
+# organs:
+#   - all
+
+# 肺・胸部のみの場合:
+# organs:
+#   - lung_upper_lobe_left
+#   - lung_lower_lobe_left
+#   - lung_upper_lobe_right
+#   - lung_middle_lobe_right
+#   - lung_lower_lobe_right
+#   - heart
+#   - aorta
+#   - trachea
+#   - esophagus
 
 # セグメンテーション設定
 segmentation:
@@ -35,20 +54,22 @@ segmentation:
   # 高速モード（精度よりも速度優先）
   fast: true
 
-  # 抽出する臓器のサブセット（胸部臓器のみ）
-  # NoneまたはFalseの場合は全臓器を抽出
-  # 必要に応じてコメントアウトして全臓器抽出も可能
-  roi_subset:
-    - lung_upper_lobe_left
-    - lung_lower_lobe_left
-    - lung_upper_lobe_right
-    - lung_middle_lobe_right
-    - lung_lower_lobe_right
-    - heart
-    - aorta
-    - pulmonary_artery
-    - trachea
-    - esophagus
+  # 抽出する臓器のサブセット
+  # null または コメントアウトで全117臓器を抽出
+  # 特定の臓器のみを抽出する場合はリストで指定
+  roi_subset: null  # 全臓器を抽出（推奨）
+
+  # 胸部のみの場合の例:
+  # roi_subset:
+  #   - lung_upper_lobe_left
+  #   - lung_lower_lobe_left
+  #   - lung_upper_lobe_right
+  #   - lung_middle_lobe_right
+  #   - lung_lower_lobe_right
+  #   - heart
+  #   - aorta
+  #   - trachea
+  #   - esophagus
 
 # 出力設定
 output:

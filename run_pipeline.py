@@ -21,7 +21,7 @@ except ImportError:
 
 def load_config(config_path="config.yaml"):
     default_config = {
-        'organs': ['lung_upper_lobe_left', 'lung_lower_lobe_left', 'lung_upper_lobe_right', 'lung_middle_lobe_right', 'lung_lower_lobe_right', 'heart', 'aorta', 'trachea', 'esophagus'],
+        'organs': ['liver', 'spleen', 'kidney_left', 'kidney_right', 'adrenal_gland_left', 'adrenal_gland_right', 'aorta', 'vertebrae_L1'],
         'modalities': ['CT'],
         'segmentation': {'tasks': {'CT': 'total', 'MR': 'total_mr', 'PET': 'use_ct_mask', 'SPECT': 'use_ct_mask'}, 'fast': True},
         'output': {'csv_file': 'radiomics_results.csv', 'include_diagnostics': False}

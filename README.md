@@ -107,34 +107,30 @@ modalities:
   - CT
   - PET
 
-# Target organs for feature extraction (thoracic organs)
+# Target organs (representative set covering size/uptake/PV variations)
 organs:
-  # Lung lobes
-  - lung_upper_lobe_left
-  - lung_lower_lobe_left
-  - lung_upper_lobe_right
-  - lung_middle_lobe_right
-  - lung_lower_lobe_right
-  # Cardiovascular
-  - heart
+  # Large organs (stable)
+  - liver
+  - spleen
+  # Medium organs (physiologic uptake)
+  - kidney_left
+  - kidney_right
+  # Small organs (PV effect)
+  - adrenal_gland_left
+  - adrenal_gland_right
+  # Reference (blood pool)
   - aorta
-  # Airways/GI
-  - trachea
-  - esophagus
+  # Bone marrow (representative)
+  - vertebrae_L1
+
+# Use 'all' for all 117 organs:
+# organs:
+#   - all
 
 # Segmentation settings
 segmentation:
   fast: true  # Use fast mode for quicker processing
-  roi_subset:  # Limit to thoracic organs (reduces processing time)
-    - lung_upper_lobe_left
-    - lung_lower_lobe_left
-    - lung_upper_lobe_right
-    - lung_middle_lobe_right
-    - lung_lower_lobe_right
-    - heart
-    - aorta
-    - trachea
-    - esophagus
+  roi_subset: null  # null = all organs (recommended)
 
 # Output settings
 output:
