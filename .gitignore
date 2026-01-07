@@ -16,6 +16,7 @@ debug_*/
 
 # Results (may contain patient data)
 *.csv
+!examples/*.csv
 results_*.csv
 pet_ct_radiomics_results.csv
 tumor_contralateral_summary.csv
