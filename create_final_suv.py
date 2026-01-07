@@ -20,13 +20,20 @@ DICOM_DIR = BASE_DIR / "raw_download"
 NIFTI_DIR = BASE_DIR / "nifti_images"
 SEG_DIR = BASE_DIR / "segmentations"
 
-# 対象臓器
+# 対象臓器（デフォルト：胸部臓器）
 ORGANS = [
+    # 肺葉
     "lung_upper_lobe_left",
     "lung_lower_lobe_left",
     "lung_upper_lobe_right",
     "lung_middle_lobe_right",
-    "lung_lower_lobe_right"
+    "lung_lower_lobe_right",
+    # 心血管系
+    "heart",
+    "aorta",
+    # 気道・消化管
+    "trachea",
+    "esophagus"
 ]
 
 

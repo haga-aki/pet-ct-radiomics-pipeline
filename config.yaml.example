@@ -7,13 +7,21 @@ modalities:
   - PET
 
 # 抽出する臓器（TotalSegmentatorの出力ラベルを使用）
-# 'all'を指定すると検出された全臓器を対象にします
+# 'all'を指定するとセグメンテーションされた全臓器を対象にします
+# 以下は胸部臓器のデフォルト設定
 organs:
+  # 肺葉
   - lung_upper_lobe_left
   - lung_lower_lobe_left
   - lung_upper_lobe_right
   - lung_middle_lobe_right
   - lung_lower_lobe_right
+  # 心血管系
+  - heart
+  - aorta
+  # 気道・消化管
+  - trachea
+  - esophagus
 
 # セグメンテーション設定
 segmentation:

@@ -107,18 +107,25 @@ modalities:
   - CT
   - PET
 
-# Target organs for feature extraction
+# Target organs for feature extraction (thoracic organs)
 organs:
+  # Lung lobes
   - lung_upper_lobe_left
   - lung_lower_lobe_left
   - lung_upper_lobe_right
   - lung_middle_lobe_right
   - lung_lower_lobe_right
+  # Cardiovascular
+  - heart
+  - aorta
+  # Airways/GI
+  - trachea
+  - esophagus
 
 # Segmentation settings
 segmentation:
   fast: true  # Use fast mode for quicker processing
-  roi_subset:  # Limit to thoracic organs
+  roi_subset:  # Limit to thoracic organs (reduces processing time)
     - lung_upper_lobe_left
     - lung_lower_lobe_left
     - lung_upper_lobe_right
@@ -126,6 +133,8 @@ segmentation:
     - lung_lower_lobe_right
     - heart
     - aorta
+    - trachea
+    - esophagus
 
 # Output settings
 output:
