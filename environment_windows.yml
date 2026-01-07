@@ -1,0 +1,32 @@
+# Windows用環境ファイル (CUDA 12.1対応)
+# conda env create -f environment_windows.yml
+name: radiomics
+channels:
+  - conda-forge
+  - pytorch
+  - nvidia
+dependencies:
+  - python=3.10
+  - numpy>=1.26
+  - pandas
+  - matplotlib
+  - pyyaml
+  - pip
+  # PyTorch with CUDA 12.1 (Windows)
+  - pytorch>=2.0
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=12.1
+  # SimpleITK
+  - simpleitk
+  # 医療画像処理
+  - pip:
+    - pydicom>=2.4
+    - nibabel>=5.0
+    - dicom2nifti>=2.4
+    - pyradiomics>=3.0
+    - TotalSegmentator>=2.0
+    - scikit-image
+    - scikit-learn
+    - seaborn
+    - tqdm

@@ -1,0 +1,51 @@
+# 肺PET/CT解析パイプライン設定ファイル
+# このファイルをconfig.yamlとしてコピーして使用してください
+
+# 処理対象のモダリティ（CT, PET, MR, SPECT から選択）
+modalities:
+  - CT
+  - PET
+
+# 抽出する臓器（TotalSegmentatorの出力ラベルを使用）
+# 'all'を指定すると検出された全臓器を対象にします
+organs:
+  - lung_upper_lobe_left
+  - lung_lower_lobe_left
+  - lung_upper_lobe_right
+  - lung_middle_lobe_right
+  - lung_lower_lobe_right
+
+# セグメンテーション設定
+segmentation:
+  # モダリティごとのTotalSegmentatorタスク
+  tasks:
+    CT: total           # CTは標準タスク
+    MR: total_mr        # MRはMR専用タスク
+    PET: use_ct_mask    # PETはCTマスクを使用
+    SPECT: use_ct_mask  # SPECTはCTマスクを使用
+
+  # 高速モード（精度よりも速度優先）
+  fast: true
+
+  # 抽出する臓器のサブセット（胸部臓器のみ）
+  # NoneまたはFalseの場合は全臓器を抽出
+  # 必要に応じてコメントアウトして全臓器抽出も可能
+  roi_subset:
+    - lung_upper_lobe_left
+    - lung_lower_lobe_left
+    - lung_upper_lobe_right
+    - lung_middle_lobe_right
+    - lung_lower_lobe_right
+    - heart
+    - aorta
+    - pulmonary_artery
+    - trachea
+    - esophagus
+
+# 出力設定
+output:
+  # 結果CSVファイル名
+  csv_file: radiomics_results.csv
+
+  # 診断情報を含めるか（True: 全てのpyradiomics出力を保存）
+  include_diagnostics: false

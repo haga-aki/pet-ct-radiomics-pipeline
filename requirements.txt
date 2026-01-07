@@ -1,0 +1,19 @@
+# --- 基本ツール ---
+numpy
+pandas
+tqdm
+pyyaml
+scikit-learn
+scipy
+
+# --- 画像処理 & DICOM ---
+SimpleITK
+nibabel
+pydicom
+dicom2nifti
+python-gdcm
+
+# --- AI & 解析 ---
+monai
+TotalSegmentator
+pyradiomics

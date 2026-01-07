@@ -1,0 +1,31 @@
+# Linux用環境ファイル
+# conda env create -f environment_linux.yml
+name: med_ai
+channels:
+  - conda-forge
+  - pytorch
+  - nvidia  # CUDA用
+dependencies:
+  - python=3.10
+  - numpy>=1.26
+  - pandas
+  - matplotlib
+  - pyyaml
+  - pip
+  # PyTorch with CUDA (Linux)
+  - pytorch>=2.0
+  - torchvision
+  - pytorch-cuda=11.8  # CUDAバージョンに合わせて変更
+  # SimpleITK
+  - simpleitk
+  # 医療画像処理
+  - pip:
+    - pydicom>=2.4
+    - nibabel>=5.0
+    - dicom2nifti>=2.4
+    - pyradiomics>=3.0
+    - TotalSegmentator>=2.0
+    - scikit-image
+    - scikit-learn
+    - seaborn
+    - tqdm
