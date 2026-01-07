@@ -38,12 +38,12 @@ def load_config(config_path="config.yaml"):
     return default_config
 
 def get_root_dir():
-    if sys.platform == "win32":
-        return Path("D:/")
-    elif sys.platform == "darwin":
-        return Path("/Volumes/HS")
-    else:
-        return Path("./")
+    """Get root directory - defaults to script location or current directory"""
+    # Check for environment variable override
+    if os.environ.get("PET_PIPELINE_ROOT"):
+        return Path(os.environ["PET_PIPELINE_ROOT"])
+    # Default to script directory
+    return Path(__file__).parent.resolve()
 
 ROOT_DIR = get_root_dir()
 DICOM_DIR = ROOT_DIR / "raw_download"

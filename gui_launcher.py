@@ -1,4 +1,4 @@
-#!/Users/akira/miniforge3/envs/med_ai/bin/python
+#!/usr/bin/env python
 """
 PET/CT Radiomics 解析 GUI ランチャー
 ====================================
@@ -13,7 +13,8 @@ import sys
 
 # プロジェクトのベースディレクトリ
 BASE_DIR = Path(__file__).parent
-PYTHON_PATH = "/Users/akira/miniforge3/envs/med_ai/bin/python"
+# Use current Python interpreter
+PYTHON_PATH = sys.executable
 
 
 class RadiomicsLauncherApp:

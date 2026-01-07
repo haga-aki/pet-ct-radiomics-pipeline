@@ -1,4 +1,4 @@
-#!/Users/akira/miniforge3/envs/med_ai/bin/python
+#!/usr/bin/env python
 """
 PET SUV変換モジュール
 =====================
@@ -297,7 +297,9 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         dicom_dir = sys.argv[1]
     else:
-        dicom_dir = "/Users/akira/Local/medical_ai/ycu_project/raw_download/20251226165328/05"
+        print("Usage: python suv_converter.py <dicom_directory>")
+        print("Example: python suv_converter.py ./raw_download/patient_001/PET")
+        sys.exit(1)
 
     converter = SUVConverter(dicom_dir)
     converter.print_info()

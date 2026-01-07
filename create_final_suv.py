@@ -1,10 +1,11 @@
-#!/Users/akira/miniforge3/envs/med_ai/bin/python
+#!/usr/bin/env python
 """
 正しいSUV画像を作成してRadiomicsを再計算
 メーカー別のSUV変換を自動で行う
 
 複数症例対応版: segmentations/内の全患者を処理
 """
+import os
 import nibabel as nib
 import numpy as np
 import pandas as pd
@@ -13,7 +14,8 @@ from radiomics import featureextractor
 
 from suv_converter import SUVConverter
 
-BASE_DIR = Path("/Users/akira/Local/medical_ai/ycu_project")
+# Base directory - defaults to script location, can be overridden by environment variable
+BASE_DIR = Path(os.environ.get("PET_PIPELINE_ROOT", Path(__file__).parent))
 DICOM_DIR = BASE_DIR / "raw_download"
 NIFTI_DIR = BASE_DIR / "nifti_images"
 SEG_DIR = BASE_DIR / "segmentations"

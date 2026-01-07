@@ -1,8 +1,9 @@
-#!/Users/akira/miniforge3/envs/med_ai/bin/python
+#!/usr/bin/env python
 """
 補正後のPET SUV Radiomics結果を可視化
 複数症例対応版: 各患者ごとにグラフを生成
 """
+import os
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -14,8 +15,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-# ディレクトリ設定
-BASE_DIR = Path("/Users/akira/Local/medical_ai/ycu_project")
+# ディレクトリ設定 - defaults to script location
+BASE_DIR = Path(os.environ.get("PET_PIPELINE_ROOT", Path(__file__).parent))
 OUTPUT_DIR = BASE_DIR / "analysis_results"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
