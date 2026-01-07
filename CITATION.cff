@@ -1,0 +1,54 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "PET-CT Radiomics Pipeline"
+version: 1.0.0
+date-released: 2026-01-08
+url: "https://github.com/haga-aki/pet-ct-radiomics-pipeline"
+repository-code: "https://github.com/haga-aki/pet-ct-radiomics-pipeline"
+license: MIT
+keywords:
+  - PET-CT
+  - radiomics
+  - TotalSegmentator
+  - medical imaging
+  - deep learning
+  - IBSI
+  - PyRadiomics
+abstract: >-
+  Fully automated, reproducible whole-body PET radiomics extraction
+  using TotalSegmentator-derived CT segmentation masks. Supports
+  117 anatomical structures, multi-vendor SUV conversion, and
+  107 IBSI-compliant radiomic features.
+authors:
+  - family-names: Haga
+    given-names: Akira
+    orcid: "https://orcid.org/0000-0000-0000-0000"
+    affiliation: "Yokohama City University Hospital"
+  - family-names: Utsunomiya
+    given-names: Daisuke
+    affiliation: "Yokohama City University Hospital"
+preferred-citation:
+  type: article
+  title: "Automated Multi-Organ PET Radiomics Extraction Using TotalSegmentator-Derived CT Segmentation Masks"
+  authors:
+    - family-names: Haga
+      given-names: Akira
+    - family-names: Utsunomiya
+      given-names: Daisuke
+  journal: "Medical Physics"
+  year: 2026
+  notes: "Technical Note"
+references:
+  - type: software
+    title: "TotalSegmentator"
+    authors:
+      - family-names: Wasserthal
+        given-names: Jakob
+    url: "https://github.com/wasserth/TotalSegmentator"
+  - type: software
+    title: "PyRadiomics"
+    authors:
+      - family-names: van Griethuysen
+        given-names: Joost J.M.
+    url: "https://pyradiomics.readthedocs.io/"

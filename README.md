@@ -1,81 +1,120 @@
 # PET-CT Radiomics Pipeline
 
-Automated PET/CT radiomics feature extraction pipeline using TotalSegmentator for CT segmentation.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+
+**Fully automated, reproducible whole-body PET radiomics extraction using TotalSegmentator-derived CT segmentation masks.**
+
+This pipeline provides a standardized workflow for extracting radiomic features from PET/CT data, supporting:
+- **117 anatomical structures** via TotalSegmentator deep learning segmentation
+- **Multi-vendor SUV conversion** (TOSHIBA/Canon, Philips, Siemens, GE)
+- **107 IBSI-compliant radiomic features** via PyRadiomics
+
+## Quick Start
+
+```bash
+# Clone and setup
+git clone https://github.com/haga-aki/pet-ct-radiomics-pipeline.git
+cd pet-ct-radiomics-pipeline
+conda env create -f environment.yml
+conda activate pet_radiomics
+
+# Run pipeline
+python run_pipeline.py --input /path/to/PETCT_DICOM --output /path/to/output
+```
+
+## Example Output
+
+The pipeline generates a CSV file with radiomic features for each organ:
+
+| patient_id | modality | organ | original_firstorder_Mean | original_firstorder_Maximum | original_shape_VoxelVolume | original_glcm_Correlation | ... |
+|------------|----------|-------|--------------------------|-----------------------------|-----------------------------|---------------------------|-----|
+| 0001 | PET | liver | 2.10 | 6.09 | 1286000 | 0.82 | ... |
+| 0001 | PET | spleen | 1.81 | 3.54 | 181000 | 0.78 | ... |
+| 0001 | PET | kidney_left | 2.76 | 6.25 | 160000 | 0.75 | ... |
+| 0001 | PET | aorta | 1.72 | 4.00 | 67000 | 0.71 | ... |
+| 0001 | CT | liver | 58.2 | 180.5 | 1286000 | 0.85 | ... |
+
+**107 features per organ** including:
+- First-order statistics (18): mean, median, entropy, energy, etc.
+- Shape features (14): volume, surface area, sphericity, etc.
+- Texture features (75): GLCM, GLRLM, GLSZM, GLDM, NGTDM
+
+## Pipeline Overview
+
+```
+DICOM Input (PET + CT)
+    │
+    ├── 1. DICOM → NIfTI conversion (dicom2nifti)
+    │
+    ├── 2. Rigid PET-CT registration (SimpleITK)
+    │
+    ├── 3. Vendor-specific SUV conversion
+    │       ├── TOSHIBA/Canon: SUVbw × 100 format
+    │       ├── Philips: SUV Scale Factor
+    │       └── Siemens/GE: Decay-corrected BQML
+    │
+    ├── 4. CT segmentation (TotalSegmentator, 117 structures)
+    │
+    ├── 5. Mask resampling to PET space (nearest-neighbor)
+    │
+    └── 6. PyRadiomics feature extraction (IBSI-compliant)
+            │
+            └── CSV output (107 features × organs × modalities)
+```
 
 ## Features
 
 - **Automated CT Segmentation**: TotalSegmentator-based organ segmentation (117 anatomical structures)
 - **Multi-vendor SUV Support**: Automatic SUV conversion for TOSHIBA/Canon, Philips, Siemens, and GE scanners
 - **IBSI-compliant Radiomics**: PyRadiomics feature extraction (107 standardized features)
+- **Quality Control Visualization**: Automatic generation of CT/PET fusion images with segmentation overlays
 - **Cross-platform**: Works on Linux, macOS, and Windows
-- **GPU Acceleration**: CUDA support for fast segmentation
-
-## Pipeline Overview
-
-```
-DICOM Input
-    │
-    ├── 1. DICOM → NIfTI conversion
-    │
-    ├── 2. Rigid PET-CT registration (SimpleITK)
-    │
-    ├── 3. Vendor-specific SUV conversion
-    │
-    ├── 4. CT segmentation (TotalSegmentator)
-    │
-    ├── 5. Mask resampling to PET space
-    │
-    └── 6. PyRadiomics feature extraction
-            │
-            └── CSV output
-```
+- **GPU Acceleration**: CUDA support for fast segmentation (~90 seconds per case)
 
 ## Requirements
 
-- Python 3.10+
-- CUDA-capable GPU (recommended, 8GB+ VRAM)
-- ~5GB disk space for TotalSegmentator models
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
+| Python | 3.10+ | 3.10+ |
+| RAM | 8GB | 16GB+ |
+| GPU | - | NVIDIA (8GB+ VRAM) |
+| Storage | 5GB | 10GB+ |
 
 ### Dependencies
 
 - TotalSegmentator >= 2.0
-- PyRadiomics
-- SimpleITK
-- PyTorch
-- PyDICOM
+- PyRadiomics >= 3.0
+- SimpleITK >= 2.0
+- PyTorch >= 2.0
+- pydicom
+- nibabel
+- dicom2nifti
 
 ## Installation
 
-### 1. Clone the repository
+### Option 1: Conda (Recommended)
 
 ```bash
-git clone https://github.com/yourusername/pet-ct-radiomics-pipeline.git
+# Clone the repository
+git clone https://github.com/haga-aki/pet-ct-radiomics-pipeline.git
 cd pet-ct-radiomics-pipeline
-```
 
-### 2. Create conda environment
+# Create conda environment
+conda env create -f environment.yml  # Linux/macOS
+# or
+conda env create -f environment_windows.yml  # Windows
 
-```bash
-# Linux/macOS
-conda env create -f environment.yml
 conda activate pet_radiomics
 
-# Windows
-conda env create -f environment_windows.yml
-conda activate pet_radiomics
+# Create configuration file
+cp config.yaml.example config.yaml
 ```
 
-Or using pip:
+### Option 2: pip
 
 ```bash
 pip install -r requirements.txt
-```
-
-### 3. Configure the pipeline
-
-```bash
-cp config.yaml.example config.yaml
-# Edit config.yaml with your settings
 ```
 
 ## Usage
@@ -93,71 +132,85 @@ python run_pipeline.py --config config.yaml
 ### GUI Application
 
 ```bash
-# Launch GUI (macOS/Windows)
 python gui_launcher.py
 ```
 
 ### Configuration
 
-Edit `config.yaml` to customize:
+Edit `config.yaml` to customize target organs and settings:
 
 ```yaml
-# Modalities to process
-modalities:
-  - CT
-  - PET
-
-# Target organs (representative set covering size/uptake/PV variations)
+# Target organs (representative set recommended for validation)
 organs:
-  # Large organs (stable)
-  - liver
-  - spleen
-  # Medium organs (physiologic uptake)
-  - kidney_left
-  - kidney_right
-  # Small organs (PV effect)
-  - adrenal_gland_left
-  - adrenal_gland_right
-  # Reference (blood pool)
-  - aorta
-  # Bone marrow (representative)
-  - vertebrae_L1
+  - liver          # Large, stable
+  - spleen         # Large, stable
+  - kidney_left    # Medium, physiologic uptake
+  - kidney_right   # Medium, physiologic uptake
+  - adrenal_gland_left   # Small, PV-susceptible
+  - adrenal_gland_right  # Small, PV-susceptible
+  - aorta          # Blood pool reference
+  - vertebrae_L1   # Bone marrow representative
 
-# Use 'all' for all 117 organs:
+# Or use all 117 organs:
 # organs:
 #   - all
-
-# Segmentation settings
-segmentation:
-  fast: true  # Use fast mode for quicker processing
-  roi_subset: null  # null = all organs (recommended)
-
-# Output settings
-output:
-  csv_file: radiomics_results.csv
-  include_diagnostics: false
 ```
 
-## Output
+See [docs/config_reference.md](docs/config_reference.md) for full configuration options.
 
-The pipeline generates a CSV file containing:
+## Output Specification
 
-- **Patient ID**: Anonymized identifier
-- **Organ**: Segmented structure name
-- **First-order features**: Mean, median, variance, entropy, etc.
-- **Shape features**: Volume, surface area, sphericity, etc.
-- **Texture features**: GLCM, GLRLM, GLSZM, NGTDM features
+### CSV Columns
+
+| Column | Description | Example |
+|--------|-------------|---------|
+| patient_id | Anonymized patient identifier | 0001 |
+| modality | Image modality | PET, CT |
+| organ | TotalSegmentator label | liver, spleen |
+| original_firstorder_Mean | Mean intensity/SUV | 2.10 |
+| original_firstorder_Maximum | Maximum intensity/SUV | 6.09 |
+| original_shape_VoxelVolume | Volume in mm³ | 1286000 |
+| original_glcm_* | GLCM texture features | 0.82 |
+| original_glrlm_* | GLRLM run-length features | 0.45 |
+| original_glszm_* | GLSZM size-zone features | 0.33 |
+| original_gldm_* | GLDM dependence features | 0.28 |
+| original_ngtdm_* | NGTDM coarseness features | 0.15 |
+
+See [docs/radiomics_feature_list.md](docs/radiomics_feature_list.md) for complete feature definitions.
 
 ## SUV Conversion
 
 The pipeline automatically handles vendor-specific SUV calculations:
 
-| Vendor | Method |
-|--------|--------|
-| Siemens | Standard SUV formula |
-| GE | Private DICOM tags (0009,100d) |
-| Philips | SUV Scale Factor (7053,1000) |
-| TOSHIBA/Canon | Philips-compatible method |
+| Vendor | Detection Method | DICOM Tag | Conversion |
+|--------|------------------|-----------|------------|
+| TOSHIBA/Canon | Private tag | (7065,102D) | Pixel ÷ 100 |
+| Philips | SUV scale factor | (7053,1000) | Pixel × factor |
+| Siemens | BQML units | Standard | Decay correction |
+| GE | BQML units | Standard | Decay correction |
+
+## Quality Control
+
+The pipeline generates visualization images for each organ:
+
+- **Panel 1**: CT only (anatomical reference)
+- **Panel 2**: CT + segmentation mask overlay
+- **Panel 3**: PET-CT fusion + segmentation mask
+
+These visualizations enable rapid verification of:
+- Registration accuracy
+- Segmentation quality
+- SUV plausibility
+
+## Example Data
+
+This pipeline has been validated with:
+- TOSHIBA Celesteion PET/CT scanner data
+- Representative organ set (8 organs covering size/uptake variations)
+
+For public PET/CT datasets, see:
+- [TCIA NSCLC-Radiomics](https://wiki.cancerimagingarchive.net/display/Public/NSCLC-Radiomics)
+- [TCIA Head-Neck-PET-CT](https://wiki.cancerimagingarchive.net/display/Public/Head-Neck-PET-CT)
 
 ## Project Structure
 
@@ -170,9 +223,16 @@ pet-ct-radiomics-pipeline/
 ├── gui_launcher.py          # GUI application
 ├── visualize_*.py           # Visualization scripts
 ├── config.yaml.example      # Configuration template
+├── docs/                    # Documentation
+│   ├── pipeline_overview.md
+│   ├── radiomics_feature_list.md
+│   ├── config_reference.md
+│   └── clinical_qc_checklist.md
 ├── environment.yml          # Conda environment (Linux/Mac)
 ├── environment_windows.yml  # Conda environment (Windows)
-└── requirements.txt         # pip requirements
+├── requirements.txt         # pip requirements
+├── CITATION.cff             # Citation metadata
+└── LICENSE                  # MIT License
 ```
 
 ## Citation
@@ -181,17 +241,18 @@ If you use this pipeline in your research, please cite:
 
 ```bibtex
 @article{haga2026petct,
-  title={Automated PET Radiomics Pipeline Using TotalSegmentator-derived CT Segmentation},
+  title={Automated Multi-Organ PET Radiomics Extraction Using TotalSegmentator-Derived CT Segmentation Masks},
   author={Haga, Akira and Utsunomiya, Daisuke},
-  journal={Japanese Journal of Radiology},
-  year={2026}
+  journal={Medical Physics},
+  year={2026},
+  note={Technical Note}
 }
 ```
 
 ## References
 
-- [TotalSegmentator](https://github.com/wasserth/TotalSegmentator)
-- [PyRadiomics](https://pyradiomics.readthedocs.io/)
+- [TotalSegmentator](https://github.com/wasserth/TotalSegmentator) - Wasserthal et al., Radiol Artif Intell 2023
+- [PyRadiomics](https://pyradiomics.readthedocs.io/) - van Griethuysen et al., Cancer Res 2017
 - [IBSI](https://theibsi.github.io/) - Image Biomarker Standardisation Initiative
 
 ## License
@@ -202,7 +263,15 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
 ## Authors
 
-- Akira Haga, MD, PhD - Yokohama City University Hospital
-- Daisuke Utsunomiya, MD, PhD - Yokohama City University Hospital
+- **Akira Haga, MD, PhD** - Yokohama City University Hospital
+- **Daisuke Utsunomiya, MD, PhD** - Yokohama City University Hospital
+
+## Acknowledgments
+
+- TotalSegmentator developers for the excellent segmentation model
+- PyRadiomics team for IBSI-compliant feature extraction
+- Radiology technologists at Yokohama City University Hospital
