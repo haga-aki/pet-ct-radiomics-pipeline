@@ -1,0 +1,128 @@
+# PyRadiomics Configuration for PET-CT Radiomics Pipeline
+# ========================================================
+# This file defines the fixed feature extraction settings for reproducibility.
+# Reference: https://pyradiomics.readthedocs.io/en/latest/customization.html
+#
+# IMPORTANT: These settings are optimized for SUV-based PET radiomics.
+# Modifying these parameters will affect reproducibility.
+
+# Image types to extract features from
+imageType:
+  Original: {}
+  # Wavelet and LoG filters are disabled to preserve native SUV values
+  # Uncomment below to enable (will multiply feature count):
+  # Wavelet: {}
+  # LoG:
+  #   sigma: [1.0, 2.0, 3.0]
+
+# Feature classes to extract
+featureClass:
+  shape:
+  firstorder:
+  glcm:
+  glrlm:
+  glszm:
+  gldm:
+  ngtdm:
+
+# Extraction settings
+setting:
+  # =========================================================================
+  # RESAMPLING SETTINGS
+  # =========================================================================
+  # No resampling - use native PET resolution
+  # For PET, typical voxel size is 4x4x4 mm
+  # Resampling disabled to preserve original SUV values
+  resampledPixelSpacing:  # null = no resampling
+  interpolator: 'sitkBSpline'  # Used only if resampling enabled
+  padDistance: 5
+
+  # =========================================================================
+  # INTENSITY DISCRETIZATION
+  # =========================================================================
+  # binWidth: Not set - continuous SUV values preserved
+  # For texture features, PyRadiomics will use default discretization
+  # If you need fixed bin width, uncomment:
+  # binWidth: 0.25  # SUV units
+
+  # Alternative: fixed bin count
+  # binCount: 64
+
+  # =========================================================================
+  # NORMALIZATION
+  # =========================================================================
+  # Normalization disabled to preserve SUV scale
+  normalize: false
+  normalizeScale: 1
+
+  # Outlier removal disabled
+  removeOutliers:  # null = disabled
+
+  # =========================================================================
+  # 2D vs 3D EXTRACTION
+  # =========================================================================
+  # 3D extraction (volumetric)
+  force2D: false
+  force2Ddimension: 0  # 0=axial, 1=coronal, 2=sagittal (only if force2D=true)
+
+  # =========================================================================
+  # TEXTURE MATRIX PARAMETERS
+  # =========================================================================
+  # GLCM distance
+  distances: [1]
+
+  # Symmetrical GLCM
+  symmetricalGLCM: true
+
+  # Weighted combination of GLCMs from different angles
+  weightingNorm:  # null = no weighting
+
+  # =========================================================================
+  # ROI SETTINGS
+  # =========================================================================
+  # Minimum ROI dimensions (in voxels)
+  minimumROIDimensions: 2
+
+  # Minimum number of voxels in ROI
+  # ROIs with fewer voxels will be skipped
+  minimumROISize: 50
+
+  # Label value in mask (1 = foreground)
+  label: 1
+
+  # Geometry tolerance for mask/image alignment
+  geometryTolerance: 1e-6
+
+  # Correct mask to match image geometry
+  correctMask: true
+
+  # =========================================================================
+  # FIRST-ORDER SPECIFIC
+  # =========================================================================
+  # Voxel array shift for energy calculations
+  # Set to minimum SUV value if needed
+  voxelArrayShift: 0
+
+  # =========================================================================
+  # GLCM SPECIFIC
+  # =========================================================================
+  # Infinite values handling
+  # infiniteValue: 10000  # Replace inf with this value
+
+  # =========================================================================
+  # LOGGING
+  # =========================================================================
+  # Enable detailed logging
+  enableCExtensions: true
+  additionalInfo: true
+
+# =========================================================================
+# VERSION INFORMATION
+# =========================================================================
+# This configuration was validated with:
+# - PyRadiomics 3.1.x
+# - SimpleITK 2.3.x
+# - Python 3.10.x
+#
+# For reproducibility, ensure your environment matches these versions.
+# See environment.yml for complete dependency specifications.

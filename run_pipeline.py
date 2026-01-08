@@ -260,7 +260,157 @@ def step3_radiomics(nifti_path, seg_folder, anon_id, modality):
     log_progress(f"{modality}: Radiomics extraction completed ({len(features_list)}/{len(organs)} successful).", "INFO")
     return features_list
 
+def print_version_report():
+    """Print version information for all dependencies."""
+    import platform
+    print("=" * 60)
+    print("PET-CT Radiomics Pipeline - Version Report")
+    print("=" * 60)
+    print(f"\nSystem Information:")
+    print(f"  Platform: {platform.system()} {platform.release()}")
+    print(f"  Python: {platform.python_version()}")
+
+    print(f"\nCore Dependencies:")
+    try:
+        import radiomics
+        print(f"  PyRadiomics: {radiomics.__version__}")
+    except:
+        print("  PyRadiomics: Not installed")
+
+    try:
+        print(f"  SimpleITK: {sitk.Version.VersionString()}")
+    except:
+        print("  SimpleITK: Not installed")
+
+    try:
+        import totalsegmentator
+        print(f"  TotalSegmentator: {getattr(totalsegmentator, '__version__', 'installed')}")
+    except:
+        print("  TotalSegmentator: Not installed")
+
+    try:
+        print(f"  NumPy: {np.__version__}")
+    except:
+        print("  NumPy: Not installed")
+
+    try:
+        print(f"  Pandas: {pd.__version__}")
+    except:
+        print("  Pandas: Not installed")
+
+    try:
+        print(f"  nibabel: {nib.__version__}")
+    except:
+        print("  nibabel: Not installed")
+
+    try:
+        import pydicom
+        print(f"  pydicom: {pydicom.__version__}")
+    except:
+        print("  pydicom: Not installed")
+
+    if TORCH_AVAILABLE:
+        import torch
+        print(f"  PyTorch: {torch.__version__}")
+        print(f"  CUDA Available: {torch.cuda.is_available()}")
+        if torch.cuda.is_available():
+            print(f"  CUDA Version: {torch.version.cuda}")
+            print(f"  GPU: {torch.cuda.get_device_name(0)}")
+    else:
+        print("  PyTorch: Not installed")
+
+    print(f"\nConfiguration:")
+    print(f"  Config file: {'config.yaml' if Path('config.yaml').exists() else 'Using defaults'}")
+    print(f"  Params file: {'params.yaml' if Path('params.yaml').exists() else 'Using defaults'}")
+    print(f"  Target organs: {CONFIG['organs'][:3]}... ({len(CONFIG['organs'])} total)")
+    print(f"  Modalities: {CONFIG['modalities']}")
+    print("=" * 60)
+
+def run_dry_run():
+    """Perform a dry run without actual processing."""
+    print("=" * 60)
+    print("PET-CT Radiomics Pipeline - Dry Run")
+    print("=" * 60)
+
+    print(f"\nInput Directory: {DICOM_DIR}")
+    if not DICOM_DIR.exists():
+        print(f"  WARNING: Directory does not exist!")
+        return
+
+    target_folders = [p.name for p in DICOM_DIR.iterdir() if p.is_dir()]
+    print(f"  Found {len(target_folders)} patient folders")
+
+    print(f"\nOutput Configuration:")
+    print(f"  NIfTI Directory: {NIFTI_DIR}")
+    print(f"  Segmentation Directory: {SEG_DIR}")
+    print(f"  Results CSV: {RESULT_CSV}")
+
+    print(f"\nProcessing Configuration:")
+    print(f"  Target Organs ({len(CONFIG['organs'])}):")
+    for organ in CONFIG['organs']:
+        print(f"    - {organ}")
+    print(f"  Modalities: {CONFIG['modalities']}")
+    print(f"  Segmentation Mode: {'fast' if CONFIG['segmentation'].get('fast', True) else 'full'}")
+
+    print(f"\nGPU Status:")
+    gpu_available, gpu_message = check_gpu_memory()
+    print(f"  {gpu_message}")
+
+    print(f"\nEstimated Processing:")
+    est_time_per_case = 120 if gpu_available else 480  # seconds
+    total_cases = len(target_folders)
+    print(f"  Cases: {total_cases}")
+    print(f"  Estimated time per case: ~{est_time_per_case // 60} minutes")
+    print(f"  Estimated total time: ~{(total_cases * est_time_per_case) // 60} minutes")
+
+    print(f"\nDry run complete. No files were modified.")
+    print("=" * 60)
+
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="PET-CT Radiomics Pipeline using TotalSegmentator",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python run_pipeline.py                    # Run full pipeline
+  python run_pipeline.py --dry-run          # Preview without processing
+  python run_pipeline.py --version-report   # Show dependency versions
+  python run_pipeline.py --input /path/to/dicom --output /path/to/output
+        """
+    )
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Preview processing without executing")
+    parser.add_argument("--version-report", action="store_true",
+                        help="Print version information for all dependencies")
+    parser.add_argument("--input", type=str, default=None,
+                        help="Input DICOM directory (overrides config)")
+    parser.add_argument("--output", type=str, default=None,
+                        help="Output directory (overrides config)")
+    parser.add_argument("--config", type=str, default="config.yaml",
+                        help="Configuration file path")
+
+    args = parser.parse_args()
+
+    # Handle special modes
+    if args.version_report:
+        print_version_report()
+        sys.exit(0)
+
+    if args.dry_run:
+        run_dry_run()
+        sys.exit(0)
+
+    # Override directories if specified
+    if args.input:
+        DICOM_DIR = Path(args.input)
+    if args.output:
+        NIFTI_DIR = Path(args.output) / "nifti_images"
+        SEG_DIR = Path(args.output) / "segmentations"
+        NIFTI_DIR.mkdir(parents=True, exist_ok=True)
+        SEG_DIR.mkdir(parents=True, exist_ok=True)
+
     log_progress("=== Pipeline Started ===", "INFO")
 
     # Check GPU availability
@@ -275,7 +425,7 @@ if __name__ == "__main__":
     all_results = []
     if not DICOM_DIR.exists():
         log_progress(f"Error: {DICOM_DIR} does not exist.", "ERROR")
-        sys.exit()
+        sys.exit(1)
     target_folders = [p.name for p in DICOM_DIR.iterdir() if p.is_dir()]
     log_progress(f"Found {len(target_folders)} patients. Config: modalities={CONFIG['modalities']}, organs={CONFIG['organs']}", "INFO")
 
