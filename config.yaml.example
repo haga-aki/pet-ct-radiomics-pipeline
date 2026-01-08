@@ -15,7 +15,7 @@ modalities:
 # ==============================================================================
 # TARGET ORGANS
 # ==============================================================================
-# TotalSegmentator supports 117 anatomical structures
+# TotalSegmentator supports 104 anatomical structures
 # Use 'all' to process all available organs
 # Or specify a custom list below
 
@@ -39,7 +39,7 @@ organs:
   - vertebrae_L1   # Bone marrow
 
 # ------------------------------------------------------------------------------
-# ALTERNATIVE: All 117 organs
+# ALTERNATIVE: All 104 organs
 # ------------------------------------------------------------------------------
 # organs:
 #   - all
@@ -59,7 +59,7 @@ organs:
 #   - esophagus
 
 # ------------------------------------------------------------------------------
-# COMPLETE ORGAN LIST (117 structures)
+# COMPLETE ORGAN LIST (104 structures)
 # Uncomment organs as needed
 # ------------------------------------------------------------------------------
 # organs:
@@ -208,7 +208,7 @@ segmentation:
   fast: true
 
   # ROI subset: Limit TotalSegmentator output to specific organs
-  # null = extract all 117 organs (recommended)
+  # null = extract all 104 organs (recommended)
   # List specific organs to reduce disk usage
   roi_subset: null
 
@@ -228,12 +228,12 @@ output:
 # ==============================================================================
 # Uncomment and modify as needed
 
-# registration:
-#   metric: MutualInformation
-#   optimizer: GradientDescent
-#   interpolation: Linear
+# spatial_alignment:
+#   # PET-to-CT alignment using NIfTI world coordinates (affine transformation)
+#   # Note: NOT de novo registration - uses pre-aligned integrated PET/CT data
+#   interpolation: Linear   # For PET resampling (order=1 in nibabel)
 
 # radiomics:
-#   bin_width: 0.5          # SUV bin width for texture features
+#   bin_width: 0.25         # SUV bin width for texture features (see params.yaml)
 #   resegment_range: null   # [min, max] to exclude values outside range
 #   normalize: false        # Normalize image before extraction

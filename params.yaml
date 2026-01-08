@@ -40,12 +40,12 @@ setting:
   # =========================================================================
   # INTENSITY DISCRETIZATION
   # =========================================================================
-  # binWidth: Not set - continuous SUV values preserved
-  # For texture features, PyRadiomics will use default discretization
-  # If you need fixed bin width, uncomment:
-  # binWidth: 0.25  # SUV units
+  # Fixed bin width for texture feature computation (GLCM, GLRLM, etc.)
+  # 0.25 SUV selected based on phantom studies (Pfaehler et al. 2019)
+  # Note: First-order features are computed on continuous values
+  binWidth: 0.25  # SUV units
 
-  # Alternative: fixed bin count
+  # Alternative: fixed bin count (not recommended for SUV)
   # binCount: 64
 
   # =========================================================================

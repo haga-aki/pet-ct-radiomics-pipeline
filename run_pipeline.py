@@ -213,6 +213,47 @@ def resample_mask_to_image(mask_path, ref_image_path, output_path):
         print(f"    - Resample error: {e}")
         return False
 
+
+def resample_pet_to_ct_space(pet_path, ct_path, output_path):
+    """
+    Resample PET image to CT space using world coordinates (affine transformation).
+
+    Uses nibabel's resample_from_to which properly handles the world coordinate
+    system defined in the NIfTI headers, ensuring correct spatial alignment
+    between PET and CT without requiring explicit registration.
+
+    Args:
+        pet_path: Path to PET NIfTI file
+        ct_path: Path to CT NIfTI file (reference space)
+        output_path: Path for output resampled PET file
+
+    Returns:
+        True if successful, False otherwise
+    """
+    from nibabel.processing import resample_from_to
+
+    try:
+        pet_img = nib.load(str(pet_path))
+        ct_img = nib.load(str(ct_path))
+
+        log_progress(f"  Resampling PET to CT space using world coordinates...", "INFO")
+        log_progress(f"    PET shape: {pet_img.shape}, CT shape: {ct_img.shape}", "INFO")
+
+        # Resample PET to CT grid using world coordinates
+        # This uses the affine matrices to correctly map voxels between spaces
+        pet_resampled = resample_from_to(pet_img, ct_img, order=1)
+
+        # Save resampled PET
+        nib.save(pet_resampled, str(output_path))
+
+        log_progress(f"    Resampled PET shape: {pet_resampled.shape}", "INFO")
+        log_progress(f"  PET resampled to CT space: {output_path}", "INFO")
+        return True
+
+    except Exception as e:
+        log_progress(f"  PET resampling error: {e}", "ERROR")
+        return False
+
 def step3_radiomics(nifti_path, seg_folder, anon_id, modality):
     organs = CONFIG['organs']
     include_diag = CONFIG['output'].get('include_diagnostics', False)
@@ -450,6 +491,19 @@ Examples:
             nifti = step1_convert_dicom(dicom_path, anon_id, modality)
             if not nifti:
                 continue
+
+            # For PET/SPECT, resample to CT space for proper alignment
+            if modality in ['PET', 'PT', 'SPECT'] and ct_nifti and ct_nifti.exists():
+                resampled_path = NIFTI_DIR / f"{anon_id}_{modality}_registered.nii.gz"
+                if not resampled_path.exists():
+                    if resample_pet_to_ct_space(nifti, ct_nifti, resampled_path):
+                        nifti = resampled_path
+                    else:
+                        log_progress(f"  Warning: Could not resample {modality} to CT space, using original", "WARNING")
+                else:
+                    log_progress(f"  {modality} registered file exists, using: {resampled_path.name}", "INFO")
+                    nifti = resampled_path
+
             seg_dir = step2_segmentation(nifti, anon_id, modality, ct_seg_dir, use_gpu=use_gpu)
             if not seg_dir:
                 continue

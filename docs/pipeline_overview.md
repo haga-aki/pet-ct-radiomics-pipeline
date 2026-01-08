@@ -39,7 +39,7 @@ Detailed technical documentation of the PET-CT Radiomics Pipeline.
 │  │                                                                   │   │
 │  │  • Input: CT NIfTI                                               │   │
 │  │  • Model: nnU-Net based (1.5GB)                                  │   │
-│  │  • Output: 117 anatomical structure masks                        │   │
+│  │  • Output: 104 anatomical structure masks                        │   │
 │  │  • Mode: fast (default) or full resolution                       │   │
 │  │                                                                   │   │
 │  └──────────────────────────────────────────────────────────────────┘   │
@@ -176,7 +176,7 @@ This vendor-neutral approach handles common DICOM variations automatically.
 ### Step 4: CT Segmentation
 
 **Input:** CT NIfTI file
-**Output:** 117 organ masks (NIfTI)
+**Output:** 104 organ masks (NIfTI)
 
 ```bash
 TotalSegmentator -i ct.nii.gz -o segmentations/ --fast
@@ -189,7 +189,7 @@ segmentations/
 ├── spleen.nii.gz
 ├── kidney_left.nii.gz
 ├── kidney_right.nii.gz
-├── ... (117 files)
+├── ... (104 files)
 └── combined_all_organs.nii.gz
 ```
 

@@ -68,14 +68,14 @@ organs:
 
 ### All Organs
 
-Use all 117 TotalSegmentator structures:
+Use all 104 TotalSegmentator structures:
 
 ```yaml
 organs:
   - all
 ```
 
-### Complete Organ List (117 structures)
+### Complete Organ List (104 structures)
 
 ```yaml
 # === SPLEEN ===
@@ -278,7 +278,7 @@ segmentation:
   # Fast mode (lower resolution, faster processing)
   fast: true  # Recommended for routine use
 
-  # Subset of organs to segment (null = all 117)
+  # Subset of organs to segment (null = all 104)
   roi_subset: null
 ```
 

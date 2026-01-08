@@ -9,7 +9,6 @@ import numpy as np
 import nibabel as nib
 import matplotlib.pyplot as plt
 from pathlib import Path
-import SimpleITK as sitk
 
 def normalize_image(img_data, percentile_low=1, percentile_high=99):
     """画像をパーセンタイルベースで正規化"""
@@ -92,33 +91,40 @@ def calculate_suv_from_dicom(case_id):
     return None
 
 def resample_pet_to_ct(pet_path, ct_path, suv_params=None):
-    """PETをCT空間にリサンプリング（SUV変換含む）"""
-    pet_img = sitk.ReadImage(str(pet_path))
-    ct_img = sitk.ReadImage(str(ct_path))
+    """PETをCT空間にリサンプリング（SUV変換含む）
+
+    nibabel の resample_from_to を使用してワールド座標ベースで
+    正確なリサンプリングを行う。SimpleITK より信頼性が高い。
+    """
+    from nibabel.processing import resample_from_to
+
+    pet_nib = nib.load(str(pet_path))
+    ct_nib = nib.load(str(ct_path))
+
+    pet_data = pet_nib.get_fdata()
+    ct_data = ct_nib.get_fdata()
 
     # SUV変換
     if suv_params:
-        # PET画像をnumpy配列に変換
-        pet_array = sitk.GetArrayFromImage(pet_img)
-
         # TOSHIBA PET: NIfTI値は SUVbw(X100) = SUV * 100
         # 正しいSUV値に変換
-        suv_array = pet_array / 100.0
-
-        # SUV画像を作成
-        pet_img = sitk.GetImageFromArray(suv_array)
-        pet_img.CopyInformation(sitk.ReadImage(str(pet_path)))
-
+        suv_data = pet_data / 100.0
         print(f"  SUV conversion: TOSHIBA SUVbw(X100) format detected")
-        print(f"  Converted NIfTI max {pet_array.max():.1f} → SUV max {suv_array.max():.2f}")
+        print(f"  Converted NIfTI max {pet_data.max():.1f} → SUV max {suv_data.max():.2f}")
 
-    resampler = sitk.ResampleImageFilter()
-    resampler.SetReferenceImage(ct_img)
-    resampler.SetInterpolator(sitk.sitkLinear)
-    resampler.SetDefaultPixelValue(0)
+        # SUV変換後のデータで新しいNIfTI画像を作成
+        pet_nib = nib.Nifti1Image(suv_data.astype(np.float32), pet_nib.affine, pet_nib.header)
 
-    pet_resampled = resampler.Execute(pet_img)
-    return sitk.GetArrayFromImage(pet_resampled).transpose(2, 1, 0), sitk.GetArrayFromImage(ct_img).transpose(2, 1, 0)
+    # nibabelのresample_from_toを使用（ワールド座標ベースで正確）
+    print(f"  Resampling PET to CT space using nibabel (world coordinates)...")
+    print(f"    PET shape: {pet_nib.shape}, CT shape: {ct_nib.shape}")
+
+    pet_resampled_nib = resample_from_to(pet_nib, ct_nib, order=1)
+    pet_resampled = pet_resampled_nib.get_fdata()
+
+    print(f"    Resampled PET shape: {pet_resampled.shape}")
+
+    return pet_resampled, ct_data
 
 def create_pet_ct_fusion(case_id="ILD_002"):
     """PET-CT Fusion画像の作成"""
@@ -132,10 +138,22 @@ def create_pet_ct_fusion(case_id="ILD_002"):
     # ファイルパス
     ct_path = nifti_dir / f"{case_id}_CT.nii.gz"
     pet_path = nifti_dir / f"{case_id}_PET.nii.gz"
+    pet_registered_path = nifti_dir / f"{case_id}_PET_registered.nii.gz"
     ct_seg_dir = seg_dir / f"{case_id}_CT"
 
-    if not all([ct_path.exists(), pet_path.exists(), ct_seg_dir.exists()]):
+    # 登録済みPETファイルが存在する場合はそれを優先
+    use_registered_pet = pet_registered_path.exists()
+    if use_registered_pet:
+        print(f"Using pre-registered PET: {pet_registered_path.name}")
+        pet_path_to_use = pet_registered_path
+    else:
+        pet_path_to_use = pet_path
+
+    if not all([ct_path.exists(), pet_path_to_use.exists(), ct_seg_dir.exists()]):
         print("Error: Required files not found")
+        print(f"  CT: {ct_path.exists()}")
+        print(f"  PET: {pet_path_to_use.exists()}")
+        print(f"  Seg: {ct_seg_dir.exists()}")
         return
 
     print(f"Loading and resampling images for {case_id}...")
@@ -152,8 +170,19 @@ def create_pet_ct_fusion(case_id="ILD_002"):
     ct_data = ct_img.get_fdata()
 
     # PET画像読み込みとCT空間へのリサンプリング（SUV変換含む）
-    print("  Resampling PET to CT space with SUV conversion...")
-    pet_resampled, ct_array = resample_pet_to_ct(pet_path, ct_path, suv_params)
+    if use_registered_pet:
+        # 登録済みPETはすでにCT空間にあるので、直接読み込む
+        print("  Loading pre-registered PET (already in CT space)...")
+        pet_img = nib.load(str(pet_path_to_use))
+        pet_resampled = pet_img.get_fdata()
+
+        # SUV変換（必要な場合）
+        if suv_params:
+            pet_resampled = pet_resampled / 100.0
+            print(f"  SUV conversion applied: max {pet_resampled.max():.2f}")
+    else:
+        print("  Resampling PET to CT space with SUV conversion...")
+        pet_resampled, ct_array = resample_pet_to_ct(pet_path_to_use, ct_path, suv_params)
 
     print(f"  CT shape: {ct_data.shape}")
     print(f"  PET resampled shape: {pet_resampled.shape}")

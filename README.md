@@ -6,7 +6,7 @@
 **Fully automated, reproducible whole-body PET radiomics extraction using TotalSegmentator-derived CT segmentation masks.**
 
 This pipeline provides a standardized workflow for extracting radiomic features from PET/CT data, supporting:
-- **117 anatomical structures** via TotalSegmentator deep learning segmentation
+- **104 anatomical structures** via TotalSegmentator deep learning segmentation
 - **Vendor-neutral SUV conversion** with automatic DICOM metadata handling
 - **107 IBSI-compliant radiomic features** via PyRadiomics
 
@@ -47,22 +47,23 @@ DICOM Input (PET + CT)
     │
     ├── 1. DICOM → NIfTI conversion (dicom2nifti)
     │
-    ├── 2. Rigid PET-CT registration (SimpleITK)
+    ├── 2. PET-to-CT spatial alignment (nibabel affine resampling)
+    │       Note: NOT de novo registration - uses NIfTI world coordinates
     │
     ├── 3. Automatic SUV conversion (vendor-neutral)
     │
-    ├── 4. CT segmentation (TotalSegmentator, 117 structures)
+    ├── 4. CT segmentation (TotalSegmentator, 104 structures)
     │
-    ├── 5. Mask resampling to PET space (nearest-neighbor)
+    ├── 5. CT-derived masks applied to co-registered PET
     │
-    └── 6. PyRadiomics feature extraction (IBSI-compliant)
+    └── 6. PyRadiomics feature extraction (IBSI-compliant, binWidth=0.25 SUV)
             │
             └── CSV output (107 features × organs × modalities)
 ```
 
 ## Features
 
-- **Automated CT Segmentation**: TotalSegmentator-based organ segmentation (117 anatomical structures)
+- **Automated CT Segmentation**: TotalSegmentator-based organ segmentation (104 anatomical structures)
 - **Vendor-neutral SUV Conversion**: Automatic handling of manufacturer-specific DICOM variations
 - **IBSI-aligned Radiomics**: PyRadiomics feature extraction with standardized settings (see [IBSI Compliance](#ibsi-compliance))
 - **Quality Control Visualization**: Automatic generation of CT/PET fusion images with segmentation overlays
@@ -148,7 +149,7 @@ organs:
   - aorta          # Blood pool reference
   - vertebrae_L1   # Bone marrow representative
 
-# Or use all 117 organs:
+# Or use all 104 organs:
 # organs:
 #   - all
 ```
@@ -192,8 +193,8 @@ This pipeline uses [PyRadiomics](https://pyradiomics.readthedocs.io/), which imp
 | Setting | Value | Rationale |
 |---------|-------|-----------|
 | **Resampling** | None (native resolution) | Preserves original PET voxel size (~4mm) |
-| **Intensity discretization** | None (continuous values) | Preserves SUV scale for first-order features |
-| **Interpolator** | N/A | No resampling applied |
+| **Intensity discretization** | binWidth = 0.25 SUV | Fixed bin width for texture features (Pfaehler et al. 2019) |
+| **First-order features** | Continuous SUV values | No discretization for first-order statistics |
 | **Distance (GLCM)** | 1 voxel | Standard neighborhood |
 | **Symmetrical GLCM** | True | Standard symmetric matrix |
 | **Force 2D** | False | 3D volumetric extraction |
@@ -201,8 +202,9 @@ This pipeline uses [PyRadiomics](https://pyradiomics.readthedocs.io/), which imp
 
 **Important notes:**
 - Feature *definitions* follow IBSI standards via PyRadiomics
-- *Preprocessing* choices (no resampling, no discretization) are optimized for SUV-based PET analysis
-- For strict IBSI benchmark compliance, users should apply IBSI-recommended preprocessing (fixed bin width, isotropic resampling)
+- Fixed bin width discretization (0.25 SUV) is applied for texture feature computation
+- First-order features are computed on continuous SUV values without discretization
+- No spatial resampling is applied to preserve native PET resolution
 - See [`params.yaml`](params.yaml) for the complete configuration
 
 ## Quality Control
