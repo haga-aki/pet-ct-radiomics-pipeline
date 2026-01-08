@@ -1,24 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-PET/CT Radiomics 統合解析パイプライン
-=====================================
-全ての処理を自動で実行します：
-1. DICOM → NIfTI変換
-2. PET-CT位置合わせ
-3. 肺葉セグメンテーション
-4. SUV補正
-5. Radiomics特徴量抽出
-6. 可視化・レポート生成
+PET/CT Radiomics Pipeline - Full Analysis Script
+=================================================
+Executes complete workflow:
+1. DICOM to NIfTI conversion
+2. PET-to-CT spatial alignment
+3. CT segmentation (TotalSegmentator, 104 structures)
+4. SUV conversion
+5. Radiomic feature extraction
+6. Quality control visualization
 
-使用方法:
+Usage:
     python run_full_analysis.py [--input DICOM_FOLDER] [--skip-visualization]
 
-=====================================
-⚠️ 重要: このファイルは削除しないでください！
-   run_analysis.bat (Windows) から呼び出される統合スクリプトです。
-   全環境（Mac/Linux/Windows）で使用します。
-=====================================
+=================================================
+Note: This script is called by run_analysis.bat (Windows).
+      Works on all platforms (Mac/Linux/Windows).
+=================================================
 """
 
 import sys

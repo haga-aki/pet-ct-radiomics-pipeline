@@ -239,13 +239,20 @@ pet-ct-radiomics-pipeline/
 ├── suv_converter.py         # Multi-vendor SUV conversion
 ├── create_final_suv.py      # SUV correction and radiomics
 ├── gui_launcher.py          # GUI application
-├── visualize_*.py           # Visualization scripts
 ├── config.yaml.example      # Configuration template
+├── params.yaml              # PyRadiomics settings
 ├── docs/                    # Documentation
 │   ├── pipeline_overview.md
 │   ├── radiomics_feature_list.md
 │   ├── config_reference.md
 │   └── clinical_qc_checklist.md
+├── examples/                # Example scripts and output
+│   ├── example_output.csv   # Sample radiomics output
+│   └── lung_analysis/       # Lung lobe-specific visualization
+│       ├── plot_suv_results.py
+│       ├── visualize_lung_segmentation.py
+│       ├── visualize_ct_pet_seg.py
+│       └── visualize_pet_ct_fusion.py
 ├── environment.yml          # Conda environment (Linux/Mac)
 ├── environment_windows.yml  # Conda environment (Windows)
 ├── requirements.txt         # pip requirements
