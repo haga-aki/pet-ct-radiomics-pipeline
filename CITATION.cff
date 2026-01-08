@@ -3,7 +3,7 @@ message: "If you use this software, please cite it as below."
 type: software
 title: "PET-CT Radiomics Pipeline"
 version: 1.0.0
-date-released: 2026-01-08
+date-released: 2025-01-08
 url: "https://github.com/haga-aki/pet-ct-radiomics-pipeline"
 repository-code: "https://github.com/haga-aki/pet-ct-radiomics-pipeline"
 license: MIT
@@ -35,7 +35,7 @@ preferred-citation:
       given-names: Akira
     - family-names: Utsunomiya
       given-names: Daisuke
-  year: 2026
+  year: 2025
   url: "https://github.com/haga-aki/pet-ct-radiomics-pipeline"
 references:
   - type: software

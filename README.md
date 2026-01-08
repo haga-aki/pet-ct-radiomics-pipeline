@@ -250,9 +250,9 @@ pet-ct-radiomics-pipeline/
 │   ├── config_reference.md
 │   └── clinical_qc_checklist.md
 ├── examples/                # Example scripts and output
-│   ├── example_output.csv   # Sample radiomics output
-│   └── lung_analysis/       # Lung lobe-specific visualization
-│       ├── plot_suv_results.py
+│   ├── example_output.csv   # Sample radiomics output (8-organ set)
+│   └── lung_analysis/       # Application example: lung lobe analysis
+│       ├── plot_suv_results.py        # (separate from main 8-organ workflow)
 │       ├── visualize_lung_segmentation.py
 │       ├── visualize_ct_pet_seg.py
 │       └── visualize_pet_ct_fusion.py
@@ -268,10 +268,10 @@ pet-ct-radiomics-pipeline/
 If you use this pipeline in your research, please cite:
 
 ```bibtex
-@misc{haga2026petct,
+@misc{haga2025petct,
   title={Automated Multi-Organ PET Radiomics Extraction Using TotalSegmentator-Derived CT Segmentation Masks},
   author={Haga, Akira and Utsunomiya, Daisuke},
-  year={2026},
+  year={2025},
   note={Manuscript submitted for publication},
   howpublished={\url{https://github.com/haga-aki/pet-ct-radiomics-pipeline}}
 }
