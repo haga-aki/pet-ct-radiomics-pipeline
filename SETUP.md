@@ -121,13 +121,21 @@ modalities:
   - CT
   - PET
 
-# Target organs (lung lobes)
+# Target organs (representative 8-organ set recommended for validation)
+# Covers different sizes, physiologic uptake patterns, and PV susceptibility
 organs:
-  - lung_upper_lobe_left
-  - lung_lower_lobe_left
-  - lung_upper_lobe_right
-  - lung_middle_lobe_right
-  - lung_lower_lobe_right
+  - liver              # Large, stable
+  - spleen             # Large, stable
+  - kidney_left        # Medium, physiologic uptake
+  - kidney_right       # Medium, physiologic uptake
+  - adrenal_gland_left   # Small, PV-susceptible
+  - adrenal_gland_right  # Small, PV-susceptible
+  - aorta              # Blood pool reference
+  - vertebrae_L1       # Bone marrow representative
+
+# Or use all 104 organs:
+# organs:
+#   - all
 
 # Segmentation settings
 segmentation:
@@ -137,14 +145,6 @@ segmentation:
     MR: total_mr          # MR-specific task
     PET: use_ct_mask      # Use CT mask for PET
     SPECT: use_ct_mask    # Use CT mask for SPECT
-  roi_subset:             # Limit to thoracic organs
-    - lung_upper_lobe_left
-    - lung_lower_lobe_left
-    - lung_upper_lobe_right
-    - lung_middle_lobe_right
-    - lung_lower_lobe_right
-    - heart
-    - aorta
 
 # Output settings
 output:

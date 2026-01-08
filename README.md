@@ -25,15 +25,18 @@ python run_pipeline.py --input /path/to/PETCT_DICOM --output /path/to/output
 
 ## Example Output
 
-The pipeline generates a CSV file with radiomic features for each organ:
+The pipeline generates a CSV file with radiomic features for each organ (representative 8-organ set):
 
-| patient_id | modality | organ | original_firstorder_Mean | original_firstorder_Maximum | original_shape_VoxelVolume | original_glcm_Correlation | ... |
-|------------|----------|-------|--------------------------|-----------------------------|-----------------------------|---------------------------|-----|
-| 0001 | PET | liver | 2.10 | 6.09 | 1286000 | 0.82 | ... |
-| 0001 | PET | spleen | 1.81 | 3.54 | 181000 | 0.78 | ... |
-| 0001 | PET | kidney_left | 2.76 | 6.25 | 160000 | 0.75 | ... |
-| 0001 | PET | aorta | 1.72 | 4.00 | 67000 | 0.71 | ... |
-| 0001 | CT | liver | 58.2 | 180.5 | 1286000 | 0.85 | ... |
+| patient_id | modality | organ | original_firstorder_Mean | original_firstorder_Maximum | original_shape_VoxelVolume | ... |
+|------------|----------|-------|--------------------------|-----------------------------|-----------------------------|-----|
+| 0001 | PET | liver | 2.10 | 6.09 | 1286000 | ... |
+| 0001 | PET | spleen | 1.81 | 3.54 | 181000 | ... |
+| 0001 | PET | kidney_left | 2.76 | 6.25 | 160000 | ... |
+| 0001 | PET | kidney_right | 2.85 | 6.50 | 152000 | ... |
+| 0001 | PET | adrenal_gland_left | 1.50 | 2.84 | 4300 | ... |
+| 0001 | PET | adrenal_gland_right | 0.77 | 1.62 | 2100 | ... |
+| 0001 | PET | aorta | 1.72 | 4.00 | 67000 | ... |
+| 0001 | PET | vertebrae_L1 | 1.87 | 4.50 | 38000 | ... |
 
 **107 features per organ** including:
 - First-order statistics (18): mean, median, entropy, energy, etc.
