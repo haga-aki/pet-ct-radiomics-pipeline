@@ -72,3 +72,12 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# Debug scripts (contain hardcoded paths)
+check_*.py
+
+# macOS launchers (contain hardcoded paths)
+*.command
+
+# ID mapping (may contain patient identifiers)
+id_mapping.csv

@@ -165,4 +165,3 @@ dependencies:
     - xvfbwrapper==0.2.15
     - yacs==0.1.8
 
-prefix: "/Users/akira/miniforge3/envs/med_ai"
