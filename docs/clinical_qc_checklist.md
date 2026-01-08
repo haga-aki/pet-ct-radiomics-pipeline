@@ -19,10 +19,10 @@ This document provides guidance for validating pipeline outputs before using rad
 | Blood pool (aorta) | 1.5-2.5 | Unusually high/low values |
 | Background (muscle) | 0.5-1.5 | Negative values indicate error |
 
-**Vendor-specific issues:**
-- TOSHIBA/Canon: Check for ÷100 conversion applied
-- Philips: Verify SUV scale factor used
-- Siemens/GE: Confirm decay correction applied
+**Common SUV conversion issues:**
+- Pre-scaled values: Verify division factor applied correctly
+- Scale factor encoding: Confirm multiplication by stored factor
+- BQML data: Verify decay correction applied
 
 ---
 

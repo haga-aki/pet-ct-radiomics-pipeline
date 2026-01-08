@@ -7,7 +7,7 @@
 
 This pipeline provides a standardized workflow for extracting radiomic features from PET/CT data, supporting:
 - **117 anatomical structures** via TotalSegmentator deep learning segmentation
-- **Multi-vendor SUV conversion** (TOSHIBA/Canon, Philips, Siemens, GE)
+- **Vendor-neutral SUV conversion** with automatic DICOM metadata handling
 - **107 IBSI-compliant radiomic features** via PyRadiomics
 
 ## Quick Start
@@ -49,10 +49,7 @@ DICOM Input (PET + CT)
     │
     ├── 2. Rigid PET-CT registration (SimpleITK)
     │
-    ├── 3. Vendor-specific SUV conversion
-    │       ├── TOSHIBA/Canon: SUVbw × 100 format
-    │       ├── Philips: SUV Scale Factor
-    │       └── Siemens/GE: Decay-corrected BQML
+    ├── 3. Automatic SUV conversion (vendor-neutral)
     │
     ├── 4. CT segmentation (TotalSegmentator, 117 structures)
     │
@@ -66,7 +63,7 @@ DICOM Input (PET + CT)
 ## Features
 
 - **Automated CT Segmentation**: TotalSegmentator-based organ segmentation (117 anatomical structures)
-- **Multi-vendor SUV Support**: Automatic SUV conversion for TOSHIBA/Canon, Philips, Siemens, and GE scanners
+- **Vendor-neutral SUV Conversion**: Automatic handling of manufacturer-specific DICOM variations
 - **IBSI-compliant Radiomics**: PyRadiomics feature extraction (107 standardized features)
 - **Quality Control Visualization**: Automatic generation of CT/PET fusion images with segmentation overlays
 - **Cross-platform**: Works on Linux, macOS, and Windows
@@ -180,14 +177,13 @@ See [docs/radiomics_feature_list.md](docs/radiomics_feature_list.md) for complet
 
 ## SUV Conversion
 
-The pipeline automatically handles vendor-specific SUV calculations:
+The pipeline is designed to process vendor-neutral DICOM PET/CT data. SUV conversion is handled automatically by detecting the encoding method from DICOM metadata:
 
-| Vendor | Detection Method | DICOM Tag | Conversion |
-|--------|------------------|-----------|------------|
-| TOSHIBA/Canon | Private tag | (7065,102D) | Pixel ÷ 100 |
-| Philips | SUV scale factor | (7053,1000) | Pixel × factor |
-| Siemens | BQML units | Standard | Decay correction |
-| GE | BQML units | Standard | Decay correction |
+- **Pre-scaled SUV values**: Detected via private tags, converted appropriately
+- **Activity concentration (BQML)**: Standard decay-corrected SUV formula applied
+- **Scale factor encoding**: Multiplied by stored scale factor
+
+The implementation handles common manufacturer-specific DICOM variations without requiring manual configuration.
 
 ## Quality Control
 
@@ -205,10 +201,10 @@ These visualizations enable rapid verification of:
 ## Example Data
 
 This pipeline has been validated with:
-- TOSHIBA Celesteion PET/CT scanner data
+- Clinical whole-body PET/CT scanner data
 - Representative organ set (8 organs covering size/uptake variations)
 
-For public PET/CT datasets, see:
+For public PET/CT datasets compatible with this pipeline, see:
 - [TCIA NSCLC-Radiomics](https://wiki.cancerimagingarchive.net/display/Public/NSCLC-Radiomics)
 - [TCIA Head-Neck-PET-CT](https://wiki.cancerimagingarchive.net/display/Public/Head-Neck-PET-CT)
 

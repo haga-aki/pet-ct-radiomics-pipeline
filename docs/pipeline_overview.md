@@ -23,7 +23,7 @@ Detailed technical documentation of the PET-CT Radiomics Pipeline.
 │                                                                          │
 │  ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐  │
 │  │ DICOM → NIfTI    │───▶│ PET-CT           │───▶│ SUV Conversion   │  │
-│  │ Conversion       │    │ Registration     │    │ (Multi-vendor)   │  │
+│  │ Conversion       │    │ Registration     │    │ (Vendor-neutral) │  │
 │  │ (dicom2nifti)    │    │ (SimpleITK)      │    │                  │  │
 │  └──────────────────┘    └──────────────────┘    └──────────────────┘  │
 │                                                                          │
@@ -141,23 +141,24 @@ transform = registration.Execute(fixed_ct, moving_pet)
 **Input:** Raw PET pixel values + DICOM metadata
 **Output:** SUVbw values
 
-#### TOSHIBA/Canon
+The pipeline automatically detects the SUV encoding method from DICOM metadata:
+
+#### Method 1: Pre-scaled SUV values
 
 ```python
-# Tag (7065,102D) contains "SUVbw(X100)"
-if "SUVbw" in private_tag:
-    suv = pixel_value / 100.0
+# Detected via private DICOM tags
+if has_prescaled_suv_tag:
+    suv = pixel_value / scale_factor  # e.g., divide by 100
 ```
 
-#### Philips
+#### Method 2: Scale factor encoding
 
 ```python
-# Tag (7053,1000) contains SUV scale factor
-suv_factor = ds[0x7053, 0x1000].value
-suv = pixel_value * suv_factor
+# Scale factor stored in DICOM tag
+suv = pixel_value * stored_scale_factor
 ```
 
-#### Siemens/GE (BQML)
+#### Method 3: Activity concentration (BQML)
 
 ```python
 # Standard SUV formula with decay correction
@@ -167,6 +168,8 @@ dose = injected_dose  # Bq
 decay = np.exp(-np.log(2) * time_elapsed / half_life)
 suv = activity * weight / (dose * decay)
 ```
+
+This vendor-neutral approach handles common DICOM variations automatically.
 
 ---
 
