@@ -64,7 +64,7 @@ DICOM Input (PET + CT)
 
 - **Automated CT Segmentation**: TotalSegmentator-based organ segmentation (117 anatomical structures)
 - **Vendor-neutral SUV Conversion**: Automatic handling of manufacturer-specific DICOM variations
-- **IBSI-compliant Radiomics**: PyRadiomics feature extraction (107 standardized features)
+- **IBSI-aligned Radiomics**: PyRadiomics feature extraction with standardized settings (see [IBSI Compliance](#ibsi-compliance))
 - **Quality Control Visualization**: Automatic generation of CT/PET fusion images with segmentation overlays
 - **Cross-platform**: Works on Linux, macOS, and Windows
 - **GPU Acceleration**: CUDA support for fast segmentation (~90 seconds per case)
@@ -185,6 +185,26 @@ The pipeline is designed to process vendor-neutral DICOM PET/CT data. SUV conver
 
 The implementation handles common manufacturer-specific DICOM variations without requiring manual configuration.
 
+## IBSI Compliance
+
+This pipeline uses [PyRadiomics](https://pyradiomics.readthedocs.io/), which implements feature definitions aligned with the [Image Biomarker Standardization Initiative (IBSI)](https://theibsi.github.io/). The following settings are used in `params.yaml`:
+
+| Setting | Value | Rationale |
+|---------|-------|-----------|
+| **Resampling** | None (native resolution) | Preserves original PET voxel size (~4mm) |
+| **Intensity discretization** | None (continuous values) | Preserves SUV scale for first-order features |
+| **Interpolator** | N/A | No resampling applied |
+| **Distance (GLCM)** | 1 voxel | Standard neighborhood |
+| **Symmetrical GLCM** | True | Standard symmetric matrix |
+| **Force 2D** | False | 3D volumetric extraction |
+| **Minimum ROI size** | 50 voxels | Ensures reliable texture features |
+
+**Important notes:**
+- Feature *definitions* follow IBSI standards via PyRadiomics
+- *Preprocessing* choices (no resampling, no discretization) are optimized for SUV-based PET analysis
+- For strict IBSI benchmark compliance, users should apply IBSI-recommended preprocessing (fixed bin width, isotropic resampling)
+- See [`params.yaml`](params.yaml) for the complete configuration
+
 ## Quality Control
 
 The pipeline generates visualization images for each organ:
@@ -236,14 +256,16 @@ pet-ct-radiomics-pipeline/
 If you use this pipeline in your research, please cite:
 
 ```bibtex
-@article{haga2026petct,
+@misc{haga2025petct,
   title={Automated Multi-Organ PET Radiomics Extraction Using TotalSegmentator-Derived CT Segmentation Masks},
   author={Haga, Akira and Utsunomiya, Daisuke},
-  journal={Medical Physics},
-  year={2026},
-  note={Technical Note}
+  year={2025},
+  note={Manuscript submitted for publication},
+  howpublished={\url{https://github.com/haga-aki/pet-ct-radiomics-pipeline}}
 }
 ```
+
+*Citation will be updated upon publication.*
 
 ## References
 

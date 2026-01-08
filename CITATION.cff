@@ -3,7 +3,7 @@ message: "If you use this software, please cite it as below."
 type: software
 title: "PET-CT Radiomics Pipeline"
 version: 1.0.0
-date-released: 2026-01-08
+date-released: 2025-01-08
 url: "https://github.com/haga-aki/pet-ct-radiomics-pipeline"
 repository-code: "https://github.com/haga-aki/pet-ct-radiomics-pipeline"
 license: MIT
@@ -18,8 +18,8 @@ keywords:
 abstract: >-
   Fully automated, reproducible whole-body PET radiomics extraction
   using TotalSegmentator-derived CT segmentation masks. Supports
-  117 anatomical structures, multi-vendor SUV conversion, and
-  107 IBSI-compliant radiomic features.
+  117 anatomical structures, vendor-neutral SUV conversion, and
+  107 radiomic features with IBSI-aligned definitions via PyRadiomics.
 authors:
   - family-names: Haga
     given-names: Akira
@@ -29,16 +29,16 @@ authors:
     given-names: Daisuke
     affiliation: "Yokohama City University Hospital"
 preferred-citation:
-  type: article
+  type: generic
   title: "Automated Multi-Organ PET Radiomics Extraction Using TotalSegmentator-Derived CT Segmentation Masks"
   authors:
     - family-names: Haga
       given-names: Akira
     - family-names: Utsunomiya
       given-names: Daisuke
-  journal: "Medical Physics"
-  year: 2026
-  notes: "Technical Note"
+  year: 2025
+  notes: "Manuscript submitted for publication"
+  url: "https://github.com/haga-aki/pet-ct-radiomics-pipeline"
 references:
   - type: software
     title: "TotalSegmentator"
