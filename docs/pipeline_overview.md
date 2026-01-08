@@ -22,9 +22,9 @@ Detailed technical documentation of the PET-CT Radiomics Pipeline.
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
 │  ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐  │
-│  │ DICOM → NIfTI    │───▶│ PET-CT           │───▶│ SUV Conversion   │  │
-│  │ Conversion       │    │ Registration     │    │ (Vendor-neutral) │  │
-│  │ (dicom2nifti)    │    │ (SimpleITK)      │    │                  │  │
+│  │ DICOM → NIfTI    │───▶│ PET-to-CT        │───▶│ SUV Conversion   │  │
+│  │ Conversion       │    │ Spatial Align    │    │ (Vendor-neutral) │  │
+│  │ (dicom2nifti)    │    │ (nibabel affine) │    │                  │  │
 │  └──────────────────┘    └──────────────────┘    └──────────────────┘  │
 │                                                                          │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -45,11 +45,11 @@ Detailed technical documentation of the PET-CT Radiomics Pipeline.
 │  └──────────────────────────────────────────────────────────────────┘   │
 │                                                                          │
 │  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │                    Mask Resampling                                │   │
+│  │                    Mask Application                               │   │
 │  │                                                                   │   │
-│  │  • Resample CT masks to PET space                                │   │
-│  │  • Interpolation: Nearest-neighbor (preserve labels)             │   │
-│  │  • Handle resolution mismatch                                    │   │
+│  │  • CT-derived masks applied to co-registered PET                 │   │
+│  │  • PET was already resampled to CT space in preprocessing        │   │
+│  │  • No additional mask resampling needed                          │   │
 │  │                                                                   │   │
 │  └──────────────────────────────────────────────────────────────────┘   │
 │                                                                          │
@@ -115,24 +115,31 @@ dicom2nifti.convert_directory(dicom_dir, output_dir)
 
 ---
 
-### Step 2: PET-CT Registration
+### Step 2: PET-to-CT Spatial Alignment
 
 **Input:** CT and PET NIfTI files
-**Output:** Registered PET in CT space
+**Output:** PET resampled to CT space
+
+**Important:** This step is NOT de novo multimodal registration. For integrated PET/CT scanner data, PET and CT images are already spatially aligned at the DICOM level. This step harmonizes image orientation, voxel spacing, and coordinate systems after DICOM-to-NIfTI conversion.
 
 ```python
-# Using SimpleITK
-registration = sitk.ImageRegistrationMethod()
-registration.SetMetricAsMutualInformation()
-registration.SetOptimizerAsGradientDescent()
-transform = registration.Execute(fixed_ct, moving_pet)
+# Using nibabel affine-based resampling
+import nibabel as nib
+from nibabel.processing import resample_from_to
+
+pet_img = nib.load('pet.nii.gz')
+ct_img = nib.load('ct.nii.gz')
+
+# Resample PET to CT space using world coordinates
+pet_resampled = resample_from_to(pet_img, ct_img, order=1)  # order=1 = linear interpolation
+nib.save(pet_resampled, 'pet_resampled.nii.gz')
 ```
 
-**Parameters:**
-- Metric: Mutual Information
-- Optimizer: Gradient Descent
-- Transform: Rigid (6 DOF)
-- Interpolation: Linear for images
+**Method:**
+- Uses NIfTI world coordinates (affine transformation matrices)
+- Linear interpolation (order=1) for PET to preserve SUV quantitation
+- No iterative optimization required
+- Computationally efficient (~3 seconds vs 30+ seconds for iterative registration)
 
 ---
 
@@ -195,22 +202,25 @@ segmentations/
 
 ---
 
-### Step 5: Mask Resampling
+### Step 5: Mask Application
 
-**Input:** CT-space masks, PET reference image
-**Output:** PET-space masks
+**Input:** CT-space masks, PET (already resampled to CT space)
+**Output:** Feature extraction-ready image-mask pairs
+
+Since PET was already resampled to CT space in Step 2, the CT-derived segmentation masks can be directly applied without additional resampling:
 
 ```python
-# Resample mask to PET space
-resampler = sitk.ResampleImageFilter()
-resampler.SetReferenceImage(pet_image)
-resampler.SetInterpolator(sitk.sitkNearestNeighbor)  # Preserve labels
-pet_mask = resampler.Execute(ct_mask)
+# Load the resampled PET and CT mask (both in CT space)
+import nibabel as nib
+
+pet_resampled = nib.load('pet_resampled.nii.gz')  # Already in CT space
+ct_mask = nib.load('segmentations/liver.nii.gz')   # CT-derived mask
+
+# Direct application - no resampling needed
+# Pass to PyRadiomics for feature extraction
 ```
 
-**Important:**
-- Must use nearest-neighbor interpolation
-- Check for empty masks after resampling (small organs may have 0 voxels)
+**Note:** For workflows that keep PET in native space, masks would need resampling with nearest-neighbor interpolation to preserve labels.
 
 ---
 
@@ -270,7 +280,7 @@ Patient DICOM
 | Step | Time (GPU) | Time (CPU) | Memory |
 |------|------------|------------|--------|
 | DICOM conversion | 5 sec | 5 sec | 1 GB |
-| Registration | 10 sec | 30 sec | 2 GB |
+| Spatial alignment | 3 sec | 3 sec | 1 GB |
 | SUV conversion | 2 sec | 2 sec | 0.5 GB |
 | Segmentation (fast) | 60 sec | 300 sec | 4 GB |
 | Segmentation (full) | 180 sec | 600 sec | 8 GB |
@@ -290,7 +300,7 @@ Patient DICOM
 | "CUDA out of memory" | GPU memory exceeded | Use `--fast` or CPU mode |
 | "Empty mask" | Small organ in PET space | Skip organ or use larger ROI |
 | "SUV values negative" | Conversion error | Check vendor detection |
-| "Registration failed" | Large patient motion | Manual alignment or exclude |
+| "Alignment mismatch" | Non-integrated scanner or patient motion | May require additional registration |
 
 ### Logging
 

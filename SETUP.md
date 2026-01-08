@@ -4,8 +4,8 @@
 
 This pipeline automates the following processes:
 - DICOM to NIfTI conversion
-- PET-CT rigid registration
-- TotalSegmentator-based organ segmentation
+- PET-to-CT spatial alignment (nibabel affine resampling)
+- TotalSegmentator-based organ segmentation (104 structures)
 - Multi-vendor SUV conversion
 - PyRadiomics feature extraction
 - Result visualization
@@ -190,9 +190,9 @@ run_analysis.bat
 1. **Data Preparation**: Place DICOM folders in `raw_download/`
 2. **ID Anonymization**: Folder names are converted to anonymous IDs
 3. **DICOM to NIfTI**: Automatic conversion with modality detection
-4. **Segmentation**: TotalSegmentator processes CT images
-5. **Registration**: PET images are rigidly aligned to CT
-6. **SUV Conversion**: Vendor-specific SUV calculation
+4. **Segmentation**: TotalSegmentator processes CT images (104 structures)
+5. **Spatial Alignment**: PET resampled to CT space via nibabel affine (NOT de novo registration)
+6. **SUV Conversion**: Vendor-neutral SUV calculation
 7. **Feature Extraction**: 107 IBSI-compliant radiomics features
 8. **Output**: Results saved to CSV
 
