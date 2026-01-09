@@ -228,13 +228,26 @@ def select_best_series(series_info, config):
         valid_ct = [s for s in ct_series if s['num_slices'] >= min_ct_slices]
 
         if valid_ct:
+            # FUSIONシリーズを除外（純粋なCTを優先）
+            non_fusion_ct = [s for s in valid_ct
+                            if 'fusion' not in s['series_description'].lower()]
+
+            # 非FUSIONシリーズがあればそちらを使用
+            candidates = non_fusion_ct if non_fusion_ct else valid_ct
+
             # 512x512の標準CTを優先
-            standard_ct = [s for s in valid_ct if s['image_size'] == (512, 512)]
+            standard_ct = [s for s in candidates if s['image_size'] == (512, 512)]
             if standard_ct:
-                # スライス数が最も多いものを選択
-                best_ct = max(standard_ct, key=lambda x: x['num_slices'])
+                # "CT AXIAL"を含むものを最優先、なければスライス数最大
+                axial_ct = [s for s in standard_ct
+                           if 'ct axial' in s['series_description'].lower()
+                           or 'axial' in s['series_description'].lower()]
+                if axial_ct:
+                    best_ct = max(axial_ct, key=lambda x: x['num_slices'])
+                else:
+                    best_ct = max(standard_ct, key=lambda x: x['num_slices'])
             else:
-                best_ct = max(valid_ct, key=lambda x: x['num_slices'])
+                best_ct = max(candidates, key=lambda x: x['num_slices'])
 
             selected['CT'] = best_ct['path']
             log_progress(f"  Selected CT: {best_ct['folder_name']} "
