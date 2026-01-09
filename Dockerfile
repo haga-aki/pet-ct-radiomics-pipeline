@@ -69,8 +69,10 @@ COPY run_full_analysis.py .
 COPY suv_converter.py .
 COPY create_final_suv.py .
 COPY gui_launcher.py .
+COPY visualize_mask_verification.py .
 COPY params.yaml .
 COPY config.yaml.example .
+COPY CHANGELOG.md .
 
 # Copy documentation (optional, for reference)
 COPY docs/ ./docs/
