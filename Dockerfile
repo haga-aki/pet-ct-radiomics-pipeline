@@ -1,0 +1,96 @@
+# PET-CT Radiomics Pipeline - Docker Image
+# =========================================
+# Multi-stage build for optimized image size
+# Supports both CPU and GPU (NVIDIA CUDA) execution
+
+# =========================================
+# Stage 1: Base image with CUDA support
+# =========================================
+FROM pytorch/pytorch:2.2.2-cuda12.1-cudnn8-runtime AS base
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    wget \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# =========================================
+# Stage 2: Python dependencies
+# =========================================
+FROM base AS dependencies
+
+# Copy requirements first for layer caching
+COPY requirements.txt .
+
+# Install Python packages
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+    numpy \
+    pandas \
+    tqdm \
+    pyyaml \
+    scikit-learn \
+    scipy \
+    SimpleITK \
+    nibabel \
+    pydicom \
+    dicom2nifti \
+    matplotlib \
+    seaborn \
+    TotalSegmentator>=2.0 \
+    pyradiomics>=3.0
+
+# =========================================
+# Stage 3: Final image
+# =========================================
+FROM dependencies AS final
+
+# Copy application code
+COPY run_pipeline.py .
+COPY run_full_analysis.py .
+COPY suv_converter.py .
+COPY create_final_suv.py .
+COPY gui_launcher.py .
+COPY params.yaml .
+COPY config.yaml.example .
+
+# Copy documentation (optional, for reference)
+COPY docs/ ./docs/
+COPY examples/ ./examples/
+
+# Create necessary directories
+RUN mkdir -p /data/input /data/output /app/nifti_images /app/segmentations
+
+# Set environment variables
+ENV PET_PIPELINE_ROOT=/app
+ENV PYTHONUNBUFFERED=1
+
+# Default command
+CMD ["python", "run_pipeline.py", "--help"]
+
+# =========================================
+# Usage:
+# =========================================
+# Build:
+#   docker build -t pet-ct-radiomics .
+#
+# Run (CPU):
+#   docker run -v /path/to/dicom:/data/input -v /path/to/output:/data/output \
+#       pet-ct-radiomics python run_pipeline.py --input /data/input --output /data/output
+#
+# Run (GPU):
+#   docker run --gpus all -v /path/to/dicom:/data/input -v /path/to/output:/data/output \
+#       pet-ct-radiomics python run_pipeline.py --input /data/input --output /data/output
+# =========================================

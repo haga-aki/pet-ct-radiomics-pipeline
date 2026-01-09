@@ -1,0 +1,81 @@
+# Git
+.git
+.gitignore
+
+# Data directories (should be mounted, not copied)
+raw_download/
+nifti_images/
+segmentations/
+analysis_results/
+visualizations/
+input/
+output/
+
+# Test and debug outputs
+test_*/
+debug_*/
+*.png
+*.csv
+!examples/*.csv
+
+# Model weights (will be downloaded at runtime)
+*.pth
+*.pt
+*.onnx
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+venv/
+.venv/
+env/
+
+# IDE and editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Logs
+*.log
+logs/
+
+# Local configuration (users should create their own)
+config.yaml
+
+# ID mapping (contains patient identifiers)
+id_mapping.csv
+
+# macOS launchers
+*.command
+
+# Debug scripts
+check_*.py
+
+# Environment files
+environment.yml
+environment_linux.yml
+environment_windows.yml
+
+# Documentation (optional - can be included if needed)
+# docs/
+
+# Markdown files (optional)
+*.md
+!README.md

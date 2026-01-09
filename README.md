@@ -2,6 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Docker](https://img.shields.io/badge/docker-available-blue.svg)](https://www.docker.com/)
 
 **Fully automated, reproducible whole-body PET radiomics extraction using TotalSegmentator-derived CT segmentation masks.**
 
@@ -117,6 +118,47 @@ cp config.yaml.example config.yaml
 ```bash
 pip install -r requirements.txt
 ```
+
+### Option 3: Docker (Recommended for Reproducibility)
+
+Docker provides a fully isolated environment with all dependencies pre-configured.
+
+```bash
+# Clone the repository
+git clone https://github.com/haga-aki/pet-ct-radiomics-pipeline.git
+cd pet-ct-radiomics-pipeline
+
+# Build Docker image
+docker build -t pet-ct-radiomics .
+
+# Run with CPU
+docker run -v /path/to/dicom:/data/input:ro -v /path/to/output:/data/output \
+    pet-ct-radiomics python run_pipeline.py --input /data/input --output /data/output
+
+# Run with GPU (requires NVIDIA Container Toolkit)
+docker run --gpus all -v /path/to/dicom:/data/input:ro -v /path/to/output:/data/output \
+    pet-ct-radiomics python run_pipeline.py --input /data/input --output /data/output
+```
+
+**Using Docker Compose (simplified):**
+
+```bash
+# Place DICOM data in ./input directory
+mkdir -p input output
+cp -r /path/to/dicom/* input/
+
+# Run with CPU
+docker compose run pet-radiomics
+
+# Run with GPU
+docker compose run pet-radiomics-gpu
+
+# Results will be in ./output directory
+```
+
+**GPU Requirements:**
+- NVIDIA GPU with CUDA support
+- [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) installed
 
 ## Usage
 
@@ -259,6 +301,8 @@ pet-ct-radiomics-pipeline/
 ├── environment.yml          # Conda environment (Linux/Mac)
 ├── environment_windows.yml  # Conda environment (Windows)
 ├── requirements.txt         # pip requirements
+├── Dockerfile               # Docker image definition
+├── docker-compose.yml       # Docker Compose configuration
 ├── CITATION.cff             # Citation metadata
 └── LICENSE                  # MIT License
 ```

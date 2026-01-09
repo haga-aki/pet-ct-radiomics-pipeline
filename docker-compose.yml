@@ -1,0 +1,47 @@
+# PET-CT Radiomics Pipeline - Docker Compose Configuration
+# =========================================================
+# Provides easy-to-use configurations for CPU and GPU execution
+
+services:
+  # CPU-only execution
+  pet-radiomics:
+    build: .
+    image: pet-ct-radiomics:latest
+    volumes:
+      - ./input:/data/input:ro      # DICOM input (read-only)
+      - ./output:/data/output       # Results output
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: python run_pipeline.py --input /data/input --output /data/output
+
+  # GPU-accelerated execution (requires NVIDIA Container Toolkit)
+  pet-radiomics-gpu:
+    build: .
+    image: pet-ct-radiomics:latest
+    volumes:
+      - ./input:/data/input:ro
+      - ./output:/data/output
+    environment:
+      - PYTHONUNBUFFERED=1
+      - NVIDIA_VISIBLE_DEVICES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: python run_pipeline.py --input /data/input --output /data/output
+
+# =========================================================
+# Usage:
+# =========================================================
+# 1. Place DICOM data in ./input directory
+# 2. Run with CPU:
+#    docker compose run pet-radiomics
+#
+# 3. Run with GPU:
+#    docker compose run pet-radiomics-gpu
+#
+# 4. Results will be in ./output directory
+# =========================================================
