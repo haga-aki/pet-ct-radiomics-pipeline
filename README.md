@@ -73,6 +73,7 @@ DICOM Input (PET + CT)
 - **Quality Control Visualization**: Automatic generation of CT/PET fusion images with segmentation overlays
 - **Cross-platform**: Works on Linux, macOS, and Windows
 - **GPU Acceleration**: CUDA support for fast segmentation (~90 seconds per case)
+- **DICOM Series Auto-Selection**: Automatically selects appropriate CT/PET series from multi-series data (v2.0+)
 
 ## Requirements
 
@@ -83,15 +84,18 @@ DICOM Input (PET + CT)
 | GPU | - | NVIDIA (8GB+ VRAM) |
 | Storage | 5GB | 10GB+ |
 
-### Dependencies
+### Dependencies (Version-Locked)
 
-- TotalSegmentator >= 2.0
-- PyRadiomics >= 3.0
-- SimpleITK >= 2.0
-- PyTorch >= 2.0
-- pydicom
-- nibabel
-- dicom2nifti
+**Important:** Specific versions are required to avoid compatibility issues:
+
+- **PyTorch >= 2.4** (required for TotalSegmentator torch._dynamo compatibility)
+- **NumPy >= 1.26, < 2.0** (NumPy 2.x incompatible with PyTorch/TotalSegmentator)
+- TotalSegmentator >= 2.0, < 3.0
+- PyRadiomics >= 3.0, < 4.0
+- SimpleITK >= 2.3
+- pydicom >= 2.4
+- nibabel >= 5.0
+- dicom2nifti >= 2.4
 
 ## Installation
 

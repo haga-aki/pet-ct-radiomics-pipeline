@@ -1,32 +1,59 @@
-# Windows用環境ファイル (CUDA 12.1対応)
-# conda env create -f environment_windows.yml
+# PET-CT Radiomics Pipeline - Windows Environment (CUDA 12.1)
+# KCRC等のWindows環境用
+#
+# 使用方法:
+#   conda env create -f environment_windows.yml
+#   conda activate radiomics
+#
+# 注意: GPUがない場合は pytorch-cuda=12.1 を cpuonly に変更
+
 name: radiomics
 channels:
   - conda-forge
   - pytorch
   - nvidia
+  - defaults
+
 dependencies:
+  # Python
   - python=3.10
-  - numpy>=1.26
-  - pandas
-  - matplotlib
-  - pyyaml
-  - pip
-  # PyTorch with CUDA 12.1 (Windows)
-  - pytorch>=2.0
+
+  # --- 重要: バージョン固定 ---
+  # NumPy: 1.x系を使用（NumPy 2.xはPyTorch/TotalSegmentatorと非互換）
+  - numpy>=1.26,<2.0
+
+  # PyTorch with CUDA: 2.4以上を推奨（torch._dynamo互換性のため）
+  - pytorch>=2.4
   - torchvision
   - torchaudio
-  - pytorch-cuda=12.1
-  # SimpleITK
-  - simpleitk
-  # 医療画像処理
+  - pytorch-cuda=12.1  # GPUがない場合は cpuonly に変更
+
+  # 基本ライブラリ
+  - pandas>=2.0
+  - matplotlib>=3.7
+  - pyyaml>=6.0
+  - scipy>=1.10
+  - scikit-learn>=1.3
+  - scikit-image>=0.21
+  - pillow>=10.0
+  - tqdm
+
+  # 医療画像処理（conda-forge）
+  - simpleitk>=2.3
+  - nibabel>=5.0
+
+  - pip
   - pip:
+    # DICOM処理
     - pydicom>=2.4
-    - nibabel>=5.0
     - dicom2nifti>=2.4
-    - pyradiomics>=3.0
-    - TotalSegmentator>=2.0
-    - scikit-image
-    - scikit-learn
-    - seaborn
-    - tqdm
+
+    # セグメンテーション
+    - TotalSegmentator>=2.0,<3.0
+
+    # Radiomics特徴量抽出
+    - pyradiomics>=3.0,<4.0
+
+    # 可視化
+    - seaborn>=0.12
+    - imageio>=2.30

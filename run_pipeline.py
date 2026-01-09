@@ -1,8 +1,21 @@
+"""
+PET-CT Radiomics Pipeline
+=========================
+
+DICOMからNIfTI変換 → TotalSegmentatorでセグメンテーション → PyRadiomicsで特徴量抽出
+
+改善点 (v2.0):
+- DICOMシリーズ自動選別機能（本体CTとPETを自動判別）
+- 依存関係バージョン固定（PyTorch 2.4+, NumPy 1.x）
+- 入力検証の強化
+"""
+
 import sys
 import os
 import csv
 from pathlib import Path
 from datetime import datetime
+from collections import defaultdict
 import dicom2nifti
 from totalsegmentator.python_api import totalsegmentator
 from radiomics import featureextractor
@@ -13,18 +26,42 @@ import SimpleITK as sitk
 import yaml
 
 try:
+    import pydicom
+    PYDICOM_AVAILABLE = True
+except ImportError:
+    PYDICOM_AVAILABLE = False
+    print("Warning: pydicom not available. DICOM series auto-detection disabled.")
+
+try:
     import torch
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
     print("Warning: PyTorch not available. GPU features disabled.")
 
+
 def load_config(config_path="config.yaml"):
+    """設定ファイルの読み込み"""
     default_config = {
-        'organs': ['liver', 'spleen', 'kidney_left', 'kidney_right', 'adrenal_gland_left', 'adrenal_gland_right', 'aorta', 'vertebrae_L1'],
-        'modalities': ['CT'],
-        'segmentation': {'tasks': {'CT': 'total', 'MR': 'total_mr', 'PET': 'use_ct_mask', 'SPECT': 'use_ct_mask'}, 'fast': True},
-        'output': {'csv_file': 'radiomics_results.csv', 'include_diagnostics': False}
+        'organs': [
+            'liver',
+            'kidney_left', 'kidney_right',
+            'adrenal_gland_left', 'adrenal_gland_right',
+            'vertebrae_L1',
+            'aorta',
+            'lung_upper_lobe_left', 'lung_lower_lobe_left'  # 左肺
+        ],
+        'modalities': ['CT', 'PET'],
+        'segmentation': {
+            'tasks': {'CT': 'total', 'MR': 'total_mr', 'PET': 'use_ct_mask', 'SPECT': 'use_ct_mask'},
+            'fast': True
+        },
+        'output': {'csv_file': 'radiomics_results.csv', 'include_diagnostics': False},
+        'dicom_selection': {
+            'auto_select': True,  # シリーズ自動選別
+            'min_ct_slices': 100,  # CTの最小スライス数
+            'min_pet_slices': 50,  # PETの最小スライス数
+        }
     }
     if Path(config_path).exists():
         with open(config_path, 'r') as f:
@@ -37,13 +74,13 @@ def load_config(config_path="config.yaml"):
                         default_config[key] = user_config[key]
     return default_config
 
+
 def get_root_dir():
-    """Get root directory - defaults to script location or current directory"""
-    # Check for environment variable override
+    """ルートディレクトリの取得"""
     if os.environ.get("PET_PIPELINE_ROOT"):
         return Path(os.environ["PET_PIPELINE_ROOT"])
-    # Default to script directory
     return Path(__file__).parent.resolve()
+
 
 ROOT_DIR = get_root_dir()
 DICOM_DIR = ROOT_DIR / "raw_download"
@@ -56,8 +93,9 @@ ID_MAP_FILE = Path("id_mapping.csv")
 for p in [NIFTI_DIR, SEG_DIR]:
     p.mkdir(parents=True, exist_ok=True)
 
+
 def check_gpu_memory():
-    """Check GPU availability and memory status"""
+    """GPU可用性とメモリ状態の確認"""
     if not TORCH_AVAILABLE:
         return False, "PyTorch not available"
 
@@ -65,31 +103,31 @@ def check_gpu_memory():
         return False, "CUDA not available"
 
     try:
-        gpu_mem_total = torch.cuda.get_device_properties(0).total_memory / 1024**3  # GB
-        gpu_mem_reserved = torch.cuda.memory_reserved(0) / 1024**3
+        gpu_mem_total = torch.cuda.get_device_properties(0).total_memory / 1024**3
         gpu_mem_allocated = torch.cuda.memory_allocated(0) / 1024**3
         gpu_mem_free = gpu_mem_total - gpu_mem_allocated
 
         print(f"\n=== GPU Status ===")
         print(f"Device: {torch.cuda.get_device_name(0)}")
         print(f"Total Memory: {gpu_mem_total:.2f} GB")
-        print(f"Allocated: {gpu_mem_allocated:.2f} GB")
-        print(f"Reserved: {gpu_mem_reserved:.2f} GB")
         print(f"Free: {gpu_mem_free:.2f} GB")
 
-        if gpu_mem_free < 2.0:  # Less than 2GB free
+        if gpu_mem_free < 2.0:
             return False, f"Insufficient GPU memory (only {gpu_mem_free:.2f} GB free)"
 
         return True, f"GPU ready ({gpu_mem_free:.2f} GB available)"
     except Exception as e:
         return False, f"GPU check failed: {e}"
 
+
 def log_progress(message, level="INFO"):
-    """Print progress message with timestamp"""
+    """進捗メッセージの出力"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{timestamp}] [{level}] {message}")
 
+
 def get_or_create_anon_id(original_folder_name):
+    """匿名IDの取得または作成"""
     mapping = {}
     if ID_MAP_FILE.exists():
         with open(ID_MAP_FILE, mode='r', encoding='utf-8') as f:
@@ -111,18 +149,164 @@ def get_or_create_anon_id(original_folder_name):
     print(f"  [New ID] {original_folder_name} -> {new_id}")
     return new_id
 
-def detect_folder_structure(patient_path):
-    modalities = CONFIG['modalities']
+
+def scan_dicom_series(patient_path):
+    """
+    DICOMシリーズをスキャンして情報を収集
+
+    Returns:
+        list of dict: 各シリーズの情報
+            - path: シリーズのパス
+            - modality: CT/PT/MR等
+            - series_description: シリーズ説明
+            - num_slices: スライス数
+            - image_size: 画像サイズ (rows, cols)
+    """
+    if not PYDICOM_AVAILABLE:
+        return []
+
+    series_info = []
+
+    # サブフォルダを探索
+    subdirs = [d for d in patient_path.iterdir() if d.is_dir()]
+    if not subdirs:
+        subdirs = [patient_path]
+
+    for subdir in subdirs:
+        dcm_files = list(subdir.glob("*.dcm")) + list(subdir.glob("*.DCM"))
+        if not dcm_files:
+            # ファイル拡張子なしのDICOMも検索
+            dcm_files = [f for f in subdir.iterdir() if f.is_file() and not f.suffix]
+
+        if not dcm_files:
+            continue
+
+        try:
+            # 最初のDICOMファイルからメタデータを取得
+            dcm = pydicom.dcmread(str(dcm_files[0]), stop_before_pixels=True)
+
+            modality = getattr(dcm, 'Modality', 'UNKNOWN')
+            series_desc = getattr(dcm, 'SeriesDescription', '')
+            rows = getattr(dcm, 'Rows', 0)
+            cols = getattr(dcm, 'Columns', 0)
+
+            series_info.append({
+                'path': subdir,
+                'modality': modality,
+                'series_description': series_desc,
+                'num_slices': len(dcm_files),
+                'image_size': (rows, cols),
+                'folder_name': subdir.name
+            })
+        except Exception as e:
+            log_progress(f"  Warning: Could not read DICOM in {subdir.name}: {e}", "WARNING")
+
+    return series_info
+
+
+def select_best_series(series_info, config):
+    """
+    CT/PETの本体シリーズを自動選別
+
+    選別基準:
+    - CT: スライス数が最大で、かつ画像サイズが512x512のシリーズ
+    - PET: スライス数が最大で、かつ"Axial"を含むか画像サイズが妥当なシリーズ
+
+    Returns:
+        dict: {'CT': path, 'PET': path} またはNone
+    """
+    selection_config = config.get('dicom_selection', {})
+    min_ct_slices = selection_config.get('min_ct_slices', 100)
+    min_pet_slices = selection_config.get('min_pet_slices', 50)
+
+    selected = {}
+
+    # CTシリーズの選別
+    ct_series = [s for s in series_info if s['modality'] == 'CT']
+    if ct_series:
+        # スライス数でフィルタリング（レポートやDose Report除外）
+        valid_ct = [s for s in ct_series if s['num_slices'] >= min_ct_slices]
+
+        if valid_ct:
+            # 512x512の標準CTを優先
+            standard_ct = [s for s in valid_ct if s['image_size'] == (512, 512)]
+            if standard_ct:
+                # スライス数が最も多いものを選択
+                best_ct = max(standard_ct, key=lambda x: x['num_slices'])
+            else:
+                best_ct = max(valid_ct, key=lambda x: x['num_slices'])
+
+            selected['CT'] = best_ct['path']
+            log_progress(f"  Selected CT: {best_ct['folder_name']} "
+                        f"({best_ct['num_slices']} slices, {best_ct['image_size']}, "
+                        f"'{best_ct['series_description']}')", "INFO")
+
+    # PETシリーズの選別
+    pet_series = [s for s in series_info if s['modality'] in ['PT', 'PET']]
+    if pet_series:
+        # スライス数でフィルタリング
+        valid_pet = [s for s in pet_series if s['num_slices'] >= min_pet_slices]
+
+        if valid_pet:
+            # "Axial"を含むシリーズを優先
+            axial_pet = [s for s in valid_pet
+                        if 'axial' in s['series_description'].lower()
+                        or 'body' in s['series_description'].lower()]
+
+            if axial_pet:
+                best_pet = max(axial_pet, key=lambda x: x['num_slices'])
+            else:
+                best_pet = max(valid_pet, key=lambda x: x['num_slices'])
+
+            selected['PET'] = best_pet['path']
+            log_progress(f"  Selected PET: {best_pet['folder_name']} "
+                        f"({best_pet['num_slices']} slices, {best_pet['image_size']}, "
+                        f"'{best_pet['series_description']}')", "INFO")
+
+    return selected if selected else None
+
+
+def detect_folder_structure(patient_path, config):
+    """
+    フォルダ構造を検出し、適切なモダリティパスを返す
+
+    改善: DICOMシリーズ自動選別機能を追加
+    """
+    modalities = config['modalities']
     found = {}
+
+    # 従来の方式: CT/PETサブフォルダがある場合
     for mod in modalities:
         mod_path = patient_path / mod
         if mod_path.exists() and mod_path.is_dir():
             found[mod] = mod_path
-    if not found:
-        found['CT'] = patient_path
+
+    if found:
+        return found
+
+    # 新方式: DICOMシリーズ自動選別
+    if config.get('dicom_selection', {}).get('auto_select', True) and PYDICOM_AVAILABLE:
+        log_progress(f"  Scanning DICOM series in {patient_path.name}...", "INFO")
+        series_info = scan_dicom_series(patient_path)
+
+        if series_info:
+            log_progress(f"  Found {len(series_info)} series:", "INFO")
+            for s in series_info:
+                log_progress(f"    - {s['folder_name']}: {s['modality']}, "
+                            f"{s['num_slices']} slices, {s['image_size']}, "
+                            f"'{s['series_description']}'", "INFO")
+
+            selected = select_best_series(series_info, config)
+            if selected:
+                return selected
+
+    # フォールバック: 直接DICOM処理
+    found['CT'] = patient_path
     return found
 
+
 def step1_convert_dicom(dicom_path, anon_id, modality):
+    """DICOM → NIfTI変換"""
     output_path = NIFTI_DIR / f"{anon_id}_{modality}.nii.gz"
     if output_path.exists():
         log_progress(f"{modality} NIfTI exists. Skipping.", "INFO")
@@ -139,10 +323,13 @@ def step1_convert_dicom(dicom_path, anon_id, modality):
         log_progress(f"{modality} conversion error: {e}", "ERROR")
         return None
 
+
 def step2_segmentation(nifti_path, anon_id, modality, ct_seg_dir=None, use_gpu=True):
+    """TotalSegmentatorによるセグメンテーション"""
     seg_config = CONFIG['segmentation']
     tasks = seg_config.get('tasks', {})
     task = tasks.get(modality, 'total')
+
     if task == 'use_ct_mask':
         if ct_seg_dir and ct_seg_dir.exists():
             log_progress(f"{modality}: Using CT masks", "INFO")
@@ -150,35 +337,40 @@ def step2_segmentation(nifti_path, anon_id, modality, ct_seg_dir=None, use_gpu=T
         else:
             log_progress(f"{modality}: No CT segmentation, skipping", "WARNING")
             return None
+
     output_folder = SEG_DIR / f"{anon_id}_{modality}"
     output_folder.mkdir(parents=True, exist_ok=True)
     combined_path = output_folder / "combined_all_organs.nii.gz"
+
     if combined_path.exists():
         log_progress(f"{modality}: Segmentation already completed. Skipping.", "INFO")
         return output_folder
-    try:
-        sample = output_folder / "lung_upper_lobe_left.nii.gz"
-        if not sample.exists():
-            # roi_subsetの取得
-            roi_subset = seg_config.get('roi_subset', None)
-            device = 'gpu' if use_gpu else 'cpu'  # TotalSegmentatorでは'gpu'を使用
 
-            # 環境変数でGPU 0を指定
+    try:
+        sample = output_folder / "liver.nii.gz"
+        if not sample.exists():
+            roi_subset = seg_config.get('roi_subset', None)
+            device = 'gpu' if use_gpu else 'cpu'
+
             if use_gpu:
                 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
             if roi_subset:
-                log_progress(f"{modality}: Running TotalSegmentator (task={task}, roi_subset={len(roi_subset)} organs, device={device})...", "INFO")
+                log_progress(f"{modality}: Running TotalSegmentator (task={task}, "
+                            f"roi_subset={len(roi_subset)} organs, device={device})...", "INFO")
                 totalsegmentator(input=nifti_path, output=output_folder, task=task,
                                fast=seg_config.get('fast', True), device=device, roi_subset=roi_subset)
             else:
                 log_progress(f"{modality}: Running TotalSegmentator (task={task}, device={device})...", "INFO")
                 totalsegmentator(input=nifti_path, output=output_folder, task=task,
                                fast=seg_config.get('fast', True), device=device)
+
+        # 結合マスクの作成
         all_files = sorted(list(output_folder.glob("*.nii.gz")))
         input_files = [p for p in all_files if "combined_" not in p.name]
         if not input_files:
             return output_folder
+
         base_img = nib.load(str(input_files[0]))
         combined_data = np.zeros(base_img.get_fdata().shape, dtype=np.uint16)
         for idx, part_path in enumerate(input_files, start=1):
@@ -187,6 +379,7 @@ def step2_segmentation(nifti_path, anon_id, modality, ct_seg_dir=None, use_gpu=T
                 combined_data[part_data > 0] = idx
             except:
                 pass
+
         new_img = nib.Nifti1Image(combined_data, base_img.affine, base_img.header)
         nib.save(new_img, combined_path)
         log_progress(f"{modality}: Segmentation completed successfully.", "INFO")
@@ -195,15 +388,16 @@ def step2_segmentation(nifti_path, anon_id, modality, ct_seg_dir=None, use_gpu=T
         log_progress(f"{modality} segmentation error: {e}", "ERROR")
         return None
 
+
 def resample_mask_to_image(mask_path, ref_image_path, output_path):
-    """Resample mask to match reference image space using SimpleITK"""
+    """マスクを参照画像空間にリサンプリング"""
     try:
         mask_img = sitk.ReadImage(str(mask_path))
         ref_img = sitk.ReadImage(str(ref_image_path))
 
         resampler = sitk.ResampleImageFilter()
         resampler.SetReferenceImage(ref_img)
-        resampler.SetInterpolator(sitk.sitkNearestNeighbor)  # Use nearest neighbor for labels
+        resampler.SetInterpolator(sitk.sitkNearestNeighbor)
         resampler.SetDefaultPixelValue(0)
 
         resampled_mask = resampler.Execute(mask_img)
@@ -215,21 +409,7 @@ def resample_mask_to_image(mask_path, ref_image_path, output_path):
 
 
 def resample_pet_to_ct_space(pet_path, ct_path, output_path):
-    """
-    Resample PET image to CT space using world coordinates (affine transformation).
-
-    Uses nibabel's resample_from_to which properly handles the world coordinate
-    system defined in the NIfTI headers, ensuring correct spatial alignment
-    between PET and CT without requiring explicit registration.
-
-    Args:
-        pet_path: Path to PET NIfTI file
-        ct_path: Path to CT NIfTI file (reference space)
-        output_path: Path for output resampled PET file
-
-    Returns:
-        True if successful, False otherwise
-    """
+    """PET画像をCT空間にリサンプリング"""
     from nibabel.processing import resample_from_to
 
     try:
@@ -239,11 +419,7 @@ def resample_pet_to_ct_space(pet_path, ct_path, output_path):
         log_progress(f"  Resampling PET to CT space using world coordinates...", "INFO")
         log_progress(f"    PET shape: {pet_img.shape}, CT shape: {ct_img.shape}", "INFO")
 
-        # Resample PET to CT grid using world coordinates
-        # This uses the affine matrices to correctly map voxels between spaces
         pet_resampled = resample_from_to(pet_img, ct_img, order=1)
-
-        # Save resampled PET
         nib.save(pet_resampled, str(output_path))
 
         log_progress(f"    Resampled PET shape: {pet_resampled.shape}", "INFO")
@@ -254,25 +430,27 @@ def resample_pet_to_ct_space(pet_path, ct_path, output_path):
         log_progress(f"  PET resampling error: {e}", "ERROR")
         return False
 
+
 def step3_radiomics(nifti_path, seg_folder, anon_id, modality):
+    """PyRadiomicsによる特徴量抽出"""
     organs = CONFIG['organs']
     include_diag = CONFIG['output'].get('include_diagnostics', False)
+
     if 'all' in organs:
         files = list(seg_folder.glob("*.nii.gz"))
         organs = [p.stem.replace('.nii', '') for p in files if 'combined_' not in p.name]
 
-    # Check if PET/SPECT modality needs resampling
     needs_resampling = modality in ['PET', 'PT', 'SPECT']
 
     log_progress(f"{modality}: Extracting radiomics features for {len(organs)} organs...", "INFO")
     extractor = featureextractor.RadiomicsFeatureExtractor()
     features_list = []
+
     for idx, organ in enumerate(organs, 1):
         mask_path = seg_folder / f"{organ}.nii.gz"
         if not mask_path.exists():
             continue
         try:
-            # For PET/SPECT, resample mask to match image space
             if needs_resampling:
                 resampled_dir = seg_folder.parent / f"{anon_id}_{modality}_resampled"
                 resampled_dir.mkdir(parents=True, exist_ok=True)
@@ -298,11 +476,14 @@ def step3_radiomics(nifti_path, seg_folder, anon_id, modality):
             log_progress(f"    [{idx}/{len(organs)}] Extracted: {organ}", "INFO")
         except Exception as e:
             log_progress(f"    [{idx}/{len(organs)}] Error extracting {organ}: {e}", "ERROR")
-    log_progress(f"{modality}: Radiomics extraction completed ({len(features_list)}/{len(organs)} successful).", "INFO")
+
+    log_progress(f"{modality}: Radiomics extraction completed "
+                f"({len(features_list)}/{len(organs)} successful).", "INFO")
     return features_list
 
+
 def print_version_report():
-    """Print version information for all dependencies."""
+    """依存関係のバージョン情報を表示"""
     import platform
     print("=" * 60)
     print("PET-CT Radiomics Pipeline - Version Report")
@@ -329,29 +510,16 @@ def print_version_report():
     except:
         print("  TotalSegmentator: Not installed")
 
-    try:
-        print(f"  NumPy: {np.__version__}")
-    except:
-        print("  NumPy: Not installed")
+    print(f"  NumPy: {np.__version__}")
+    print(f"  Pandas: {pd.__version__}")
+    print(f"  nibabel: {nib.__version__}")
 
     try:
-        print(f"  Pandas: {pd.__version__}")
-    except:
-        print("  Pandas: Not installed")
-
-    try:
-        print(f"  nibabel: {nib.__version__}")
-    except:
-        print("  nibabel: Not installed")
-
-    try:
-        import pydicom
         print(f"  pydicom: {pydicom.__version__}")
     except:
         print("  pydicom: Not installed")
 
     if TORCH_AVAILABLE:
-        import torch
         print(f"  PyTorch: {torch.__version__}")
         print(f"  CUDA Available: {torch.cuda.is_available()}")
         if torch.cuda.is_available():
@@ -362,13 +530,13 @@ def print_version_report():
 
     print(f"\nConfiguration:")
     print(f"  Config file: {'config.yaml' if Path('config.yaml').exists() else 'Using defaults'}")
-    print(f"  Params file: {'params.yaml' if Path('params.yaml').exists() else 'Using defaults'}")
     print(f"  Target organs: {CONFIG['organs'][:3]}... ({len(CONFIG['organs'])} total)")
     print(f"  Modalities: {CONFIG['modalities']}")
     print("=" * 60)
 
+
 def run_dry_run():
-    """Perform a dry run without actual processing."""
+    """ドライラン（処理なしのプレビュー）"""
     print("=" * 60)
     print("PET-CT Radiomics Pipeline - Dry Run")
     print("=" * 60)
@@ -381,6 +549,17 @@ def run_dry_run():
     target_folders = [p.name for p in DICOM_DIR.iterdir() if p.is_dir()]
     print(f"  Found {len(target_folders)} patient folders")
 
+    # 各フォルダのDICOMシリーズをスキャン
+    if PYDICOM_AVAILABLE:
+        print(f"\n--- DICOM Series Analysis ---")
+        for folder in target_folders[:3]:  # 最初の3症例のみ
+            patient_path = DICOM_DIR / folder
+            series_info = scan_dicom_series(patient_path)
+            print(f"\n  {folder}:")
+            for s in series_info:
+                print(f"    - {s['folder_name']}: {s['modality']}, "
+                      f"{s['num_slices']} slices, '{s['series_description']}'")
+
     print(f"\nOutput Configuration:")
     print(f"  NIfTI Directory: {NIFTI_DIR}")
     print(f"  Segmentation Directory: {SEG_DIR}")
@@ -391,21 +570,11 @@ def run_dry_run():
     for organ in CONFIG['organs']:
         print(f"    - {organ}")
     print(f"  Modalities: {CONFIG['modalities']}")
-    print(f"  Segmentation Mode: {'fast' if CONFIG['segmentation'].get('fast', True) else 'full'}")
-
-    print(f"\nGPU Status:")
-    gpu_available, gpu_message = check_gpu_memory()
-    print(f"  {gpu_message}")
-
-    print(f"\nEstimated Processing:")
-    est_time_per_case = 120 if gpu_available else 480  # seconds
-    total_cases = len(target_folders)
-    print(f"  Cases: {total_cases}")
-    print(f"  Estimated time per case: ~{est_time_per_case // 60} minutes")
-    print(f"  Estimated total time: ~{(total_cases * est_time_per_case) // 60} minutes")
+    print(f"  DICOM Auto-Selection: {CONFIG.get('dicom_selection', {}).get('auto_select', True)}")
 
     print(f"\nDry run complete. No files were modified.")
     print("=" * 60)
+
 
 if __name__ == "__main__":
     import argparse
@@ -431,10 +600,12 @@ Examples:
                         help="Output directory (overrides config)")
     parser.add_argument("--config", type=str, default="config.yaml",
                         help="Configuration file path")
+    parser.add_argument("--no-auto-select", action="store_true",
+                        help="Disable DICOM series auto-selection")
 
     args = parser.parse_args()
 
-    # Handle special modes
+    # 特殊モード
     if args.version_report:
         print_version_report()
         sys.exit(0)
@@ -443,7 +614,7 @@ Examples:
         run_dry_run()
         sys.exit(0)
 
-    # Override directories if specified
+    # ディレクトリオーバーライド
     if args.input:
         DICOM_DIR = Path(args.input)
     if args.output:
@@ -452,9 +623,13 @@ Examples:
         NIFTI_DIR.mkdir(parents=True, exist_ok=True)
         SEG_DIR.mkdir(parents=True, exist_ok=True)
 
+    # 自動選別の無効化
+    if args.no_auto_select:
+        CONFIG['dicom_selection']['auto_select'] = False
+
     log_progress("=== Pipeline Started ===", "INFO")
 
-    # Check GPU availability
+    # GPU確認
     gpu_available, gpu_message = check_gpu_memory()
     if gpu_available:
         log_progress(f"GPU Status: {gpu_message}", "INFO")
@@ -467,16 +642,24 @@ Examples:
     if not DICOM_DIR.exists():
         log_progress(f"Error: {DICOM_DIR} does not exist.", "ERROR")
         sys.exit(1)
+
     target_folders = [p.name for p in DICOM_DIR.iterdir() if p.is_dir()]
-    log_progress(f"Found {len(target_folders)} patients. Config: modalities={CONFIG['modalities']}, organs={CONFIG['organs']}", "INFO")
+    log_progress(f"Found {len(target_folders)} patients. "
+                f"Config: modalities={CONFIG['modalities']}, organs={CONFIG['organs']}", "INFO")
 
     for patient_idx, folder_name in enumerate(target_folders, 1):
         anon_id = get_or_create_anon_id(folder_name)
-        log_progress(f"\n[Patient {patient_idx}/{len(target_folders)}] Processing: {folder_name} (ID: {anon_id})", "INFO")
+        log_progress(f"\n[Patient {patient_idx}/{len(target_folders)}] "
+                    f"Processing: {folder_name} (ID: {anon_id})", "INFO")
+
         patient_path = DICOM_DIR / folder_name
-        modality_paths = detect_folder_structure(patient_path)
+        modality_paths = detect_folder_structure(patient_path, CONFIG)
         log_progress(f"  Found modalities: {list(modality_paths.keys())}", "INFO")
+
         ct_seg_dir = None
+        ct_nifti = None
+
+        # CT処理
         if 'CT' in modality_paths:
             ct_nifti = step1_convert_dicom(modality_paths['CT'], anon_id, 'CT')
             if ct_nifti:
@@ -484,24 +667,27 @@ Examples:
                 if ct_seg_dir:
                     feats = step3_radiomics(ct_nifti, ct_seg_dir, anon_id, 'CT')
                     all_results.extend(feats)
+
+        # PET/他モダリティ処理
         for modality, dicom_path in modality_paths.items():
             if modality == 'CT':
                 continue
+
             log_progress(f"  Processing {modality}...", "INFO")
             nifti = step1_convert_dicom(dicom_path, anon_id, modality)
             if not nifti:
                 continue
 
-            # For PET/SPECT, resample to CT space for proper alignment
+            # PET/SPECTはCT空間にリサンプリング
             if modality in ['PET', 'PT', 'SPECT'] and ct_nifti and ct_nifti.exists():
                 resampled_path = NIFTI_DIR / f"{anon_id}_{modality}_registered.nii.gz"
                 if not resampled_path.exists():
                     if resample_pet_to_ct_space(nifti, ct_nifti, resampled_path):
                         nifti = resampled_path
                     else:
-                        log_progress(f"  Warning: Could not resample {modality} to CT space, using original", "WARNING")
+                        log_progress(f"  Warning: Could not resample {modality} to CT space", "WARNING")
                 else:
-                    log_progress(f"  {modality} registered file exists, using: {resampled_path.name}", "INFO")
+                    log_progress(f"  {modality} registered file exists: {resampled_path.name}", "INFO")
                     nifti = resampled_path
 
             seg_dir = step2_segmentation(nifti, anon_id, modality, ct_seg_dir, use_gpu=use_gpu)
@@ -509,6 +695,8 @@ Examples:
                 continue
             feats = step3_radiomics(nifti, seg_dir, anon_id, modality)
             all_results.extend(feats)
+
+    # 結果保存
     if all_results:
         if os.path.exists(RESULT_CSV):
             df_exist = pd.read_csv(RESULT_CSV)
@@ -520,29 +708,26 @@ Examples:
         df_final.to_csv(RESULT_CSV, index=False)
         log_progress(f"\n=== Pipeline Completed === Saved {len(df_final)} rows to {RESULT_CSV}", "INFO")
 
-        # Step 4: Generate PET-CT fusion visualizations
+        # 可視化
         log_progress("\n=== Step 4: Generating PET-CT Fusion Visualizations ===", "INFO")
         try:
-            # PETデータがある症例のリストを取得
             pet_cases = df_final[df_final['Modality'] == 'PET']['PatientID'].unique()
             if len(pet_cases) > 0:
                 log_progress(f"Found {len(pet_cases)} cases with PET data for visualization", "INFO")
-
-                # visualize_pet_ct_fusion.pyをインポートして実行
                 try:
-                    from visualize_pet_ct_fusion import create_pet_ct_fusion
+                    from visualize_mask_verification import create_mask_verification
 
                     for case_id in pet_cases:
                         log_progress(f"  Visualizing: {case_id}", "INFO")
                         try:
-                            create_pet_ct_fusion(case_id)
-                            log_progress(f"  ✓ {case_id} visualization complete", "INFO")
+                            create_mask_verification(case_id)
+                            log_progress(f"  {case_id} visualization complete", "INFO")
                         except Exception as e:
-                            log_progress(f"  ✗ Error visualizing {case_id}: {e}", "ERROR")
+                            log_progress(f"  Error visualizing {case_id}: {e}", "ERROR")
 
-                    log_progress(f"=== Visualization Completed === PNG files saved to visualizations/", "INFO")
+                    log_progress(f"=== Visualization Completed ===", "INFO")
                 except ImportError as e:
-                    log_progress(f"Warning: Could not import visualize_pet_ct_fusion.py: {e}", "WARNING")
+                    log_progress(f"Warning: Could not import visualization module: {e}", "WARNING")
             else:
                 log_progress("No PET data found, skipping visualization", "INFO")
         except Exception as e:

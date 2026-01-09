@@ -19,24 +19,29 @@ modalities:
 # Use 'all' to process all available organs
 # Or specify a custom list below
 
-# RECOMMENDED: Representative organ set
-# Covers different organ characteristics for validation studies
+# DEFAULT: Clinical standard organ set for PET analysis
+# 臨床標準臓器セット（PET解析用）
 organs:
-  # Large organs (stable segmentation)
+  # 肝臓 - 大きな臓器（安定したセグメンテーション）
   - liver
-  - spleen
 
-  # Medium organs (physiologic uptake)
+  # 両側腎 - 中サイズ臓器（生理的集積）
   - kidney_left
   - kidney_right
 
-  # Small organs (partial volume susceptible)
+  # 両側副腎 - 小臓器（部分容積効果の影響を受けやすい）
   - adrenal_gland_left
   - adrenal_gland_right
 
-  # Reference regions
-  - aorta          # Blood pool
-  - vertebrae_L1   # Bone marrow
+  # L1椎体 - 骨髄参照
+  - vertebrae_L1
+
+  # 大動脈 - 血液プール参照
+  - aorta
+
+  # 左肺（上葉・下葉）
+  - lung_upper_lobe_left
+  - lung_lower_lobe_left
 
 # ------------------------------------------------------------------------------
 # ALTERNATIVE: All 104 organs
@@ -45,7 +50,7 @@ organs:
 #   - all
 
 # ------------------------------------------------------------------------------
-# ALTERNATIVE: Thoracic organs only
+# ALTERNATIVE: Full lung lobes (bilateral)
 # ------------------------------------------------------------------------------
 # organs:
 #   - lung_upper_lobe_left
@@ -53,144 +58,44 @@ organs:
 #   - lung_upper_lobe_right
 #   - lung_middle_lobe_right
 #   - lung_lower_lobe_right
-#   - heart
-#   - aorta
-#   - trachea
-#   - esophagus
+#   - liver
+#   - spleen
 
 # ------------------------------------------------------------------------------
-# COMPLETE ORGAN LIST (104 structures)
-# Uncomment organs as needed
+# ALTERNATIVE: Extended organ set
 # ------------------------------------------------------------------------------
 # organs:
-#   # === ABDOMINAL ORGANS ===
-#   - spleen
-#   - kidney_right
-#   - kidney_left
-#   - gallbladder
 #   - liver
-#   - stomach
-#   - pancreas
-#   - adrenal_gland_right
+#   - spleen
+#   - kidney_left
+#   - kidney_right
 #   - adrenal_gland_left
-#   - small_bowel
-#   - duodenum
-#   - colon
-#   - urinary_bladder
-#   - prostate
-#
-#   # === THORACIC ORGANS ===
+#   - adrenal_gland_right
+#   - aorta
+#   - vertebrae_L1
 #   - lung_upper_lobe_left
 #   - lung_lower_lobe_left
 #   - lung_upper_lobe_right
 #   - lung_middle_lobe_right
 #   - lung_lower_lobe_right
-#   - esophagus
-#   - trachea
-#   - thyroid_gland
-#
-#   # === CARDIOVASCULAR ===
-#   - heart
-#   - heart_myocardium
-#   - heart_atrium_left
-#   - heart_ventricle_left
-#   - heart_atrium_right
-#   - heart_ventricle_right
-#   - aorta
-#   - inferior_vena_cava
-#   - portal_vein_and_splenic_vein
-#   - pulmonary_artery
-#   - iliac_artery_left
-#   - iliac_artery_right
-#   - iliac_vena_left
-#   - iliac_vena_right
-#
-#   # === VERTEBRAE ===
-#   - vertebrae_S1
-#   - vertebrae_L5
-#   - vertebrae_L4
-#   - vertebrae_L3
-#   - vertebrae_L2
-#   - vertebrae_L1
-#   - vertebrae_T12
-#   - vertebrae_T11
-#   - vertebrae_T10
-#   - vertebrae_T9
-#   - vertebrae_T8
-#   - vertebrae_T7
-#   - vertebrae_T6
-#   - vertebrae_T5
-#   - vertebrae_T4
-#   - vertebrae_T3
-#   - vertebrae_T2
-#   - vertebrae_T1
-#   - vertebrae_C7
-#   - vertebrae_C6
-#   - vertebrae_C5
-#   - vertebrae_C4
-#   - vertebrae_C3
-#   - vertebrae_C2
-#   - vertebrae_C1
-#
-#   # === RIBS (LEFT) ===
-#   - rib_left_1
-#   - rib_left_2
-#   - rib_left_3
-#   - rib_left_4
-#   - rib_left_5
-#   - rib_left_6
-#   - rib_left_7
-#   - rib_left_8
-#   - rib_left_9
-#   - rib_left_10
-#   - rib_left_11
-#   - rib_left_12
-#
-#   # === RIBS (RIGHT) ===
-#   - rib_right_1
-#   - rib_right_2
-#   - rib_right_3
-#   - rib_right_4
-#   - rib_right_5
-#   - rib_right_6
-#   - rib_right_7
-#   - rib_right_8
-#   - rib_right_9
-#   - rib_right_10
-#   - rib_right_11
-#   - rib_right_12
-#
-#   # === UPPER EXTREMITY BONES ===
-#   - humerus_left
-#   - humerus_right
-#   - scapula_left
-#   - scapula_right
-#   - clavicula_left
-#   - clavicula_right
-#
-#   # === LOWER EXTREMITY / PELVIS ===
-#   - femur_left
-#   - femur_right
-#   - hip_left
-#   - hip_right
-#   - sacrum
-#
-#   # === MUSCLES ===
-#   - gluteus_maximus_left
-#   - gluteus_maximus_right
-#   - gluteus_medius_left
-#   - gluteus_medius_right
-#   - gluteus_minimus_left
-#   - gluteus_minimus_right
-#   - autochthon_left
-#   - autochthon_right
-#   - iliopsoas_left
-#   - iliopsoas_right
-#
-#   # === HEAD ===
-#   - brain
-#   - skull
-#   - face
+
+# ==============================================================================
+# DICOM SERIES SELECTION
+# ==============================================================================
+# Auto-select appropriate CT and PET series from multi-series data
+# DICOMシリーズ自動選別設定
+dicom_selection:
+  # Enable automatic series selection
+  # 複数シリーズがある場合に本体CT/PETを自動選択
+  auto_select: true
+
+  # Minimum slice count for CT (excludes Dose Report, Localizer, etc.)
+  # CTの最小スライス数（レポート等を除外）
+  min_ct_slices: 100
+
+  # Minimum slice count for PET (excludes MIP, reports)
+  # PETの最小スライス数（MIP、レポートを除外）
+  min_pet_slices: 50
 
 # ==============================================================================
 # SEGMENTATION SETTINGS
@@ -222,6 +127,27 @@ output:
   # Include PyRadiomics diagnostic features (image hash, mask stats, etc.)
   # Set to true for debugging; false for cleaner output
   include_diagnostics: false
+
+# ==============================================================================
+# VISUALIZATION SETTINGS
+# ==============================================================================
+visualization:
+  # CT window settings for mediastinal window
+  # 縦隔条件 (mediastinal window)
+  ct_window:
+    level: 40    # Window level (HU)
+    width: 400   # Window width (HU)
+
+  # PET colormap
+  pet_colormap: hot
+
+  # PET SUV range for display
+  pet_suv_range:
+    min: 0
+    max: 10
+
+  # Mask overlay alpha
+  mask_alpha: 0.3
 
 # ==============================================================================
 # ADVANCED SETTINGS (Optional)
