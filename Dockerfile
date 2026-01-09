@@ -6,7 +6,7 @@
 # =========================================
 # Stage 1: Base image with CUDA support
 # =========================================
-FROM pytorch/pytorch:2.2.2-cuda12.1-cudnn8-runtime AS base
+FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime AS base
 
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
@@ -14,10 +14,13 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (including build tools for pyradiomics)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     wget \
+    build-essential \
+    gcc \
+    g++ \
     libgl1-mesa-glx \
     libglib2.0-0 \
     libsm6 \
@@ -34,10 +37,10 @@ FROM base AS dependencies
 # Copy requirements first for layer caching
 COPY requirements.txt .
 
-# Install Python packages
+# Install Python packages (numpy first for pyradiomics build)
 RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir numpy==1.26.4 && \
     pip install --no-cache-dir \
-    numpy \
     pandas \
     tqdm \
     pyyaml \
@@ -49,8 +52,11 @@ RUN pip install --no-cache-dir --upgrade pip && \
     dicom2nifti \
     matplotlib \
     seaborn \
-    TotalSegmentator>=2.0 \
-    pyradiomics>=3.0
+    TotalSegmentator>=2.0
+
+# Install pyradiomics with build dependencies
+RUN pip install --no-cache-dir setuptools wheel cython versioneer six pykwalify && \
+    pip install --no-cache-dir --no-build-isolation pyradiomics>=3.0
 
 # =========================================
 # Stage 3: Final image
