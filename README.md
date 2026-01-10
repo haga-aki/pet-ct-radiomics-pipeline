@@ -319,7 +319,7 @@ A manuscript describing this work is in preparation.
 ```bibtex
 @misc{haga2026petct,
   title={PET-CT Radiomics Pipeline},
-  author={Haga, Akira and Utsunomiya, Daisuke},
+  author={Haga, Akira and others},
   year={2026},
   note={Manuscript in preparation},
   howpublished={\url{https://github.com/haga-aki/pet-ct-radiomics-pipeline}}
@@ -347,7 +347,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 ## Authors
 
 - **Akira Haga, MD, PhD** - Yokohama City University Hospital
-- **Daisuke Utsunomiya, MD, PhD** - Yokohama City University Hospital
+
+*Additional contributors may be added upon publication.*
 
 ## Acknowledgments
 

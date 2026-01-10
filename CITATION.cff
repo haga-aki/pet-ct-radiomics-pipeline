@@ -24,17 +24,14 @@ authors:
   - family-names: Haga
     given-names: Akira
     affiliation: "Yokohama City University Hospital"
-  - family-names: Utsunomiya
-    given-names: Daisuke
-    affiliation: "Yokohama City University Hospital"
+  # Additional contributors may be added upon publication
 preferred-citation:
   type: software
   title: "PET-CT Radiomics Pipeline"
   authors:
     - family-names: Haga
       given-names: Akira
-    - family-names: Utsunomiya
-      given-names: Daisuke
+    # Additional contributors may be added upon publication
   year: 2026
   url: "https://github.com/haga-aki/pet-ct-radiomics-pipeline"
 references:
