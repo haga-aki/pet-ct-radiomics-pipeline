@@ -19,29 +19,24 @@ modalities:
 # Use 'all' to process all available organs
 # Or specify a custom list below
 
-# DEFAULT: Clinical standard organ set for PET analysis
-# 臨床標準臓器セット（PET解析用）
+# DEFAULT: Representative 8-organ set for PET analysis
+# 代表8臓器セット（PET解析用）
 organs:
-  # 肝臓 - 大きな臓器（安定したセグメンテーション）
+  # 大きな臓器（安定したセグメンテーション）
   - liver
+  - spleen
 
-  # 両側腎 - 中サイズ臓器（生理的集積）
+  # 中サイズ臓器（生理的集積）
   - kidney_left
   - kidney_right
 
-  # 両側副腎 - 小臓器（部分容積効果の影響を受けやすい）
+  # 小臓器（部分容積効果の影響を受けやすい）
   - adrenal_gland_left
   - adrenal_gland_right
 
-  # L1椎体 - 骨髄参照
-  - vertebrae_L1
-
-  # 大動脈 - 血液プール参照
-  - aorta
-
-  # 左肺（上葉・下葉）
-  - lung_upper_lobe_left
-  - lung_lower_lobe_left
+  # 参照領域
+  - aorta          # 血液プール
+  - vertebrae_L1   # 骨髄
 
 # ------------------------------------------------------------------------------
 # ALTERNATIVE: All 104 organs

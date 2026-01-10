@@ -54,18 +54,16 @@ def apply_ct_window(ct_data, level=40, width=400):
 
 
 def create_organ_colormap():
-    """臓器ごとの色を定義"""
-    # 臓器名と色の対応
+    """臓器ごとの色を定義（代表8臓器）"""
     organ_colors = {
-        'liver': [0.8, 0.4, 0.0, 0.6],          # オレンジ
+        'liver': [0.8, 0.4, 0.0, 0.6],           # オレンジ
+        'spleen': [0.6, 0.0, 0.6, 0.6],          # 紫
         'kidney_left': [0.0, 0.6, 0.8, 0.6],     # シアン
         'kidney_right': [0.0, 0.8, 0.6, 0.6],    # ティール
         'adrenal_gland_left': [0.8, 0.8, 0.0, 0.6],   # 黄
         'adrenal_gland_right': [1.0, 0.6, 0.0, 0.6],  # オレンジ黄
-        'vertebrae_L1': [0.6, 0.0, 0.8, 0.6],    # 紫
         'aorta': [0.8, 0.0, 0.0, 0.6],           # 赤
-        'lung_upper_lobe_left': [0.0, 0.8, 0.0, 0.4],  # 緑（薄め）
-        'lung_lower_lobe_left': [0.0, 0.5, 0.0, 0.4],  # 濃い緑（薄め）
+        'vertebrae_L1': [0.0, 0.4, 0.8, 0.6],    # 青
     }
     return organ_colors
 
@@ -132,14 +130,14 @@ def create_mask_verification(case_id, nifti_dir=None, seg_dir=None, output_dir=N
         pet_normalized = np.clip(pet_data, suv_min, suv_max)
         pet_normalized = (pet_normalized - suv_min) / (suv_max - suv_min)
 
-    # マスク読み込み
+    # マスク読み込み（代表8臓器）
     organs = [
         'liver',
+        'spleen',
         'kidney_left', 'kidney_right',
         'adrenal_gland_left', 'adrenal_gland_right',
-        'vertebrae_L1',
         'aorta',
-        'lung_upper_lobe_left', 'lung_lower_lobe_left'
+        'vertebrae_L1'
     ]
     masks = load_masks(seg_dir, organs)
     organ_colors = create_organ_colormap()
@@ -324,17 +322,16 @@ def overlay_mask(ax, mask_slice, color):
 
 def add_legend(fig, organ_colors, available_organs):
     """凡例を追加"""
-    # 日本語臓器名マッピング
+    # 臓器名マッピング（代表8臓器）
     organ_names_jp = {
-        'liver': 'Liver (肝)',
-        'kidney_left': 'L Kidney (左腎)',
-        'kidney_right': 'R Kidney (右腎)',
-        'adrenal_gland_left': 'L Adrenal (左副腎)',
-        'adrenal_gland_right': 'R Adrenal (右副腎)',
-        'vertebrae_L1': 'L1 Vertebra (L1椎体)',
-        'aorta': 'Aorta (大動脈)',
-        'lung_upper_lobe_left': 'L Upper Lung (左肺上葉)',
-        'lung_lower_lobe_left': 'L Lower Lung (左肺下葉)',
+        'liver': 'Liver',
+        'spleen': 'Spleen',
+        'kidney_left': 'L Kidney',
+        'kidney_right': 'R Kidney',
+        'adrenal_gland_left': 'L Adrenal',
+        'adrenal_gland_right': 'R Adrenal',
+        'aorta': 'Aorta',
+        'vertebrae_L1': 'L1 Vertebra',
     }
 
     legend_elements = []

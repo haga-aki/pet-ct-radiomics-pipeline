@@ -45,11 +45,11 @@ def load_config(config_path="config.yaml"):
     default_config = {
         'organs': [
             'liver',
+            'spleen',
             'kidney_left', 'kidney_right',
             'adrenal_gland_left', 'adrenal_gland_right',
-            'vertebrae_L1',
             'aorta',
-            'lung_upper_lobe_left', 'lung_lower_lobe_left'  # 左肺
+            'vertebrae_L1'
         ],
         'modalities': ['CT', 'PET'],
         'segmentation': {
