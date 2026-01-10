@@ -1,11 +1,11 @@
 # PET-CT Radiomics Pipeline - Linux (GPU) Environment
-# YCU DeepStation等、CUDA GPU環境用
+# For CUDA GPU environments (e.g., workstations, HPC clusters)
 #
-# 使用方法:
+# Usage:
 #   conda env create -f environment_linux.yml
 #   conda activate med_pet2
 #
-# 注意: pytorch-cuda バージョンは環境のCUDAバージョンに合わせて変更
+# Note: Adjust pytorch-cuda version to match your CUDA version
 
 name: med_pet2
 channels:
@@ -18,16 +18,16 @@ dependencies:
   # Python
   - python=3.10
 
-  # --- 重要: バージョン固定 ---
-  # NumPy: 1.x系を使用（NumPy 2.xはPyTorch/TotalSegmentatorと非互換）
+  # --- Important: Version pinning ---
+  # NumPy: Use 1.x series (NumPy 2.x is incompatible with PyTorch/TotalSegmentator)
   - numpy>=1.26,<2.0
 
-  # PyTorch with CUDA: 2.4以上を推奨（torch._dynamo互換性のため）
+  # PyTorch with CUDA: 2.4+ recommended (for torch._dynamo compatibility)
   - pytorch>=2.4
   - torchvision
-  - pytorch-cuda=12.1  # CUDAバージョンに合わせて変更（11.8, 12.1, 12.4等）
+  - pytorch-cuda=12.1  # Adjust to match CUDA version (11.8, 12.1, 12.4, etc.)
 
-  # 基本ライブラリ
+  # Core libraries
   - pandas>=2.0
   - matplotlib>=3.7
   - pyyaml>=6.0
@@ -37,23 +37,23 @@ dependencies:
   - pillow>=10.0
   - tqdm
 
-  # 医療画像処理（conda-forge）
+  # Medical image processing (conda-forge)
   - simpleitk>=2.3
   - nibabel>=5.0
 
   - pip
   - pip:
-    # DICOM処理
+    # DICOM processing
     - pydicom>=2.4
     - dicom2nifti>=2.4
     - python-gdcm>=3.0
 
-    # セグメンテーション
+    # Segmentation
     - TotalSegmentator>=2.0,<3.0
 
-    # Radiomics特徴量抽出
+    # Radiomics feature extraction
     - pyradiomics>=3.0,<4.0
 
-    # 可視化
+    # Visualization
     - seaborn>=0.12
     - imageio>=2.30

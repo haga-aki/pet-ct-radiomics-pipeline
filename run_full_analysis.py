@@ -28,18 +28,18 @@ import subprocess
 import time
 from datetime import datetime
 
-# プロジェクトのベースディレクトリ
+# Project base directory
 BASE_DIR = Path(__file__).parent
 
-# Python実行パス（環境に応じて自動検出）
+# Python executable path (auto-detect for environment)
 def get_python_path():
-    """環境に応じたPythonパスを取得"""
-    # 現在実行中のPythonを使用（conda環境対応）
+    """Get Python path based on environment"""
+    # Use currently running Python (conda environment compatible)
     return sys.executable
 
 PYTHON_PATH = get_python_path()
 
-# 色付き出力用
+# Colored output
 class Colors:
     HEADER = '\033[95m'
     BLUE = '\033[94m'
@@ -67,7 +67,7 @@ def print_warning(text):
     print(f"{Colors.YELLOW}⚠ {text}{Colors.END}")
 
 def run_script(script_name, description):
-    """スクリプトを実行"""
+    """Execute a script"""
     script_path = BASE_DIR / script_name
     if not script_path.exists():
         print_error(f"Script not found: {script_name}")
@@ -80,7 +80,7 @@ def run_script(script_name, description):
             cwd=str(BASE_DIR),
             capture_output=True,
             text=True,
-            timeout=600  # 10分タイムアウト
+            timeout=600  # 10 minute timeout
         )
         if result.returncode == 0:
             print_success(description)
@@ -98,19 +98,19 @@ def run_script(script_name, description):
         return False
 
 def check_new_data():
-    """新しいDICOMデータがあるか確認（フォルダ名=患者ID方式）"""
+    """Check for new DICOM data (folder name = patient ID)"""
     dicom_dir = BASE_DIR / "raw_download"
     seg_dir = BASE_DIR / "segmentations"
 
     if not dicom_dir.exists():
         return [], []
 
-    # 処理済み患者（segmentationsフォルダに存在するもの）
+    # Processed patients (exist in segmentations folder)
     processed = set()
     if seg_dir.exists():
         processed = {p.name for p in seg_dir.iterdir() if p.is_dir()}
 
-    # 新しいフォルダを検出
+    # Detect new folders
     all_folders = []
     new_folders = []
     for folder in dicom_dir.iterdir():
@@ -123,87 +123,87 @@ def check_new_data():
 
 def main():
     parser = argparse.ArgumentParser(
-        description='PET/CT Radiomics 統合解析パイプライン',
+        description='PET/CT Radiomics Integrated Analysis Pipeline',
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument('--skip-visualization', action='store_true',
-                        help='可視化をスキップする')
+                        help='Skip visualization')
     parser.add_argument('--force', action='store_true',
-                        help='既存データも再処理する')
+                        help='Reprocess existing data')
     parser.add_argument('--visualize-only', action='store_true',
-                        help='可視化のみ実行する')
+                        help='Run visualization only')
     args = parser.parse_args()
 
     start_time = time.time()
 
-    print_header("PET/CT Radiomics 統合解析パイプライン")
-    print(f"開始時刻: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"作業ディレクトリ: {BASE_DIR}")
+    print_header("PET/CT Radiomics Integrated Analysis Pipeline")
+    print(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"Working directory: {BASE_DIR}")
     print(f"Python: {PYTHON_PATH}")
 
-    # 可視化のみモード
+    # Visualization only mode
     if args.visualize_only:
-        print_header("可視化のみ実行")
+        print_header("Visualization Only Mode")
 
-        print_step(1, "肺セグメンテーション確認画像")
-        run_script("visualize_lung_segmentation.py", "肺セグメンテーション画像を生成")
+        print_step(1, "Lung Segmentation Verification Images")
+        run_script("visualize_lung_segmentation.py", "Lung segmentation images generated")
 
-        print_step(2, "PET-CT位置合わせ確認画像")
-        run_script("visualize_ct_pet_seg.py", "PET-CT位置合わせ画像を生成")
+        print_step(2, "PET-CT Alignment Verification Images")
+        run_script("visualize_ct_pet_seg.py", "PET-CT alignment images generated")
 
-        print_step(3, "SUV Radiomics結果グラフ")
-        run_script("plot_suv_results.py", "SUV結果グラフを生成")
+        print_step(3, "SUV Radiomics Result Graphs")
+        run_script("plot_suv_results.py", "SUV result graphs generated")
 
-        print_header("完了")
-        print(f"結果は analysis_results/ フォルダに保存されました")
+        print_header("Complete")
+        print(f"Results saved in analysis_results/ folder")
         return
 
-    # 新しいデータの確認
+    # Check for new data
     new_data, all_data = check_new_data()
-    print(f"\n患者フォルダ: {len(all_data)}件")
+    print(f"\nPatient folders: {len(all_data)}")
     for folder in all_data:
         status = "NEW" if folder in new_data else "processed"
         print(f"  - {folder} [{status}]")
 
     if new_data:
-        print(f"\n新規データ: {len(new_data)}件")
+        print(f"\nNew data: {len(new_data)}")
     elif not args.force:
-        print_warning("新しいデータがありません。--force オプションで再処理できます。")
+        print_warning("No new data. Use --force option to reprocess.")
 
-    # Step 1: DICOM変換・セグメンテーション・Radiomics
-    print_step(1, "DICOM変換・セグメンテーション・Radiomics抽出")
-    if not run_script("run_pipeline.py", "基本パイプライン完了"):
-        print_error("基本パイプラインでエラーが発生しました")
+    # Step 1: DICOM conversion / Segmentation / Radiomics
+    print_step(1, "DICOM Conversion / Segmentation / Radiomics Extraction")
+    if not run_script("run_pipeline.py", "Base pipeline complete"):
+        print_error("Error in base pipeline")
         if not args.force:
             return
 
-    # Step 2: SUV補正とRadiomics再計算
-    print_step(2, "SUV補正とRadiomics再計算")
-    if not run_script("create_final_suv.py", "SUV補正完了"):
-        print_warning("SUV補正でエラーが発生しました（続行）")
+    # Step 2: SUV correction and Radiomics recalculation
+    print_step(2, "SUV Correction and Radiomics Recalculation")
+    if not run_script("create_final_suv.py", "SUV correction complete"):
+        print_warning("Error in SUV correction (continuing)")
 
-    # Step 3: 可視化
+    # Step 3: Visualization
     if not args.skip_visualization:
-        print_step(3, "可視化・レポート生成")
+        print_step(3, "Visualization / Report Generation")
 
-        print("  3.1 肺セグメンテーション確認画像...")
-        run_script("visualize_lung_segmentation.py", "肺セグメンテーション画像")
+        print("  3.1 Lung segmentation verification images...")
+        run_script("visualize_lung_segmentation.py", "Lung segmentation images")
 
-        print("  3.2 PET-CT位置合わせ確認画像...")
-        run_script("visualize_ct_pet_seg.py", "PET-CT位置合わせ画像")
+        print("  3.2 PET-CT alignment verification images...")
+        run_script("visualize_ct_pet_seg.py", "PET-CT alignment images")
 
-        print("  3.3 SUV Radiomics結果グラフ...")
-        run_script("plot_suv_results.py", "SUV結果グラフ")
+        print("  3.3 SUV Radiomics result graphs...")
+        run_script("plot_suv_results.py", "SUV result graphs")
 
-    # 完了
+    # Complete
     elapsed = time.time() - start_time
-    print_header("解析完了")
-    print(f"処理時間: {elapsed/60:.1f} 分")
-    print(f"\n出力ファイル:")
-    print(f"  - pet_ct_radiomics_results.csv  (Radiomics特徴量)")
-    print(f"  - analysis_results/             (可視化画像)")
-    print(f"  - nifti_images/                 (NIfTI画像)")
-    print(f"  - segmentations/                (セグメンテーション)")
+    print_header("Analysis Complete")
+    print(f"Processing time: {elapsed/60:.1f} minutes")
+    print(f"\nOutput files:")
+    print(f"  - pet_ct_radiomics_results.csv  (Radiomics features)")
+    print(f"  - analysis_results/             (Visualization images)")
+    print(f"  - nifti_images/                 (NIfTI images)")
+    print(f"  - segmentations/                (Segmentation masks)")
 
 if __name__ == "__main__":
     main()

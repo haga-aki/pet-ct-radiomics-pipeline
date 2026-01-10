@@ -1,8 +1,5 @@
 # PET-CT Radiomics Pipeline Configuration
 # Copy this file to config.yaml and customize as needed
-#
-# 肺PET/CT解析パイプライン設定ファイル
-# このファイルをconfig.yamlとしてコピーして使用してください
 
 # ==============================================================================
 # MODALITIES
@@ -20,23 +17,22 @@ modalities:
 # Or specify a custom list below
 
 # DEFAULT: Representative 8-organ set for PET analysis
-# 代表8臓器セット（PET解析用）
 organs:
-  # 大きな臓器（安定したセグメンテーション）
+  # Large organs (stable segmentation)
   - liver
   - spleen
 
-  # 中サイズ臓器（生理的集積）
+  # Medium-sized organs (physiological uptake)
   - kidney_left
   - kidney_right
 
-  # 小臓器（部分容積効果の影響を受けやすい）
+  # Small organs (susceptible to partial volume effects)
   - adrenal_gland_left
   - adrenal_gland_right
 
-  # 参照領域
-  - aorta          # 血液プール
-  - vertebrae_L1   # 骨髄
+  # Reference regions
+  - aorta          # Blood pool
+  - vertebrae_L1   # Bone marrow
 
 # ------------------------------------------------------------------------------
 # ALTERNATIVE: All 104 organs
@@ -78,18 +74,15 @@ organs:
 # DICOM SERIES SELECTION
 # ==============================================================================
 # Auto-select appropriate CT and PET series from multi-series data
-# DICOMシリーズ自動選別設定
 dicom_selection:
   # Enable automatic series selection
-  # 複数シリーズがある場合に本体CT/PETを自動選択
+  # Auto-selects main CT/PET from multi-series data
   auto_select: true
 
   # Minimum slice count for CT (excludes Dose Report, Localizer, etc.)
-  # CTの最小スライス数（レポート等を除外）
   min_ct_slices: 100
 
   # Minimum slice count for PET (excludes MIP, reports)
-  # PETの最小スライス数（MIP、レポートを除外）
   min_pet_slices: 50
 
 # ==============================================================================
@@ -128,7 +121,6 @@ output:
 # ==============================================================================
 visualization:
   # CT window settings for mediastinal window
-  # 縦隔条件 (mediastinal window)
   ct_window:
     level: 40    # Window level (HU)
     width: 400   # Window width (HU)

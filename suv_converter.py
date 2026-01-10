@@ -1,15 +1,15 @@
 #!/usr/bin/env python
 """
-PET SUV変換モジュール
-=====================
-メーカー別のSUV計算を自動で行う
+PET SUV Conversion Module
+=========================
+Automatic vendor-specific SUV calculation
 
-対応メーカー:
-- TOSHIBA/Canon: プライベートタグ (7065,102D) で SUVbw(X100) を確認
-- Siemens: Bq/ml から計算
-- GE: Bq/ml から計算
-- Philips: プライベートタグ (7053,1000) SUVScaleFactor
-- 汎用: DICOM標準タグから計算
+Supported vendors:
+- TOSHIBA/Canon: Private tag (7065,102D) for SUVbw(X100) verification
+- Siemens: Calculate from Bq/ml
+- GE: Calculate from Bq/ml
+- Philips: Private tag (7053,1000) SUVScaleFactor
+- Generic: Calculate from standard DICOM tags
 
 SUVbw = Activity(Bq/ml) * Weight(kg) / InjectedDose(Bq) * DecayCorrection
 """
@@ -21,12 +21,12 @@ from pathlib import Path
 
 
 class SUVConverter:
-    """メーカー別SUV変換クラス"""
+    """Vendor-specific SUV conversion class"""
 
     def __init__(self, dicom_dir):
         """
         Args:
-            dicom_dir: PET DICOMフォルダのパス
+            dicom_dir: Path to PET DICOM folder
         """
         self.dicom_dir = Path(dicom_dir)
         self.ds = self._load_sample_dicom()
@@ -34,7 +34,7 @@ class SUVConverter:
         self.suv_info = self._analyze_suv_method()
 
     def _load_sample_dicom(self):
-        """サンプルDICOMを読み込み"""
+        """Load a sample DICOM file"""
         for f in self.dicom_dir.iterdir():
             if f.is_file() and not f.name.startswith('.'):
                 try:
@@ -44,7 +44,7 @@ class SUVConverter:
         raise ValueError(f"No valid DICOM files in {self.dicom_dir}")
 
     def _detect_manufacturer(self):
-        """メーカーを検出"""
+        """Detect manufacturer"""
         manufacturer = getattr(self.ds, 'Manufacturer', '').upper()
 
         if 'TOSHIBA' in manufacturer or 'CANON' in manufacturer:
@@ -59,7 +59,7 @@ class SUVConverter:
             return 'GENERIC'
 
     def _analyze_suv_method(self):
-        """SUV計算方法を解析"""
+        """Analyze SUV calculation method"""
         info = {
             'manufacturer': self.manufacturer,
             'method': None,
@@ -81,8 +81,8 @@ class SUVConverter:
         return info
 
     def _analyze_toshiba(self):
-        """TOSHIBA/Canon のSUV解析"""
-        # プライベートタグ (7065, 102D) を確認
+        """Analyze TOSHIBA/Canon SUV"""
+        # Check private tag (7065, 102D)
         suv_tag = self.ds.get((0x7065, 0x102D))
 
         if suv_tag:
@@ -105,12 +105,12 @@ class SUVConverter:
                     'validated': True,
                 }
 
-        # フォールバック: Bq/ml から計算
+        # Fallback: Calculate from Bq/ml
         return self._analyze_standard()
 
     def _analyze_philips(self):
-        """Philips のSUV解析"""
-        # プライベートタグ (7053, 1000) SUVScaleFactor
+        """Analyze Philips SUV"""
+        # Private tag (7053, 1000) SUVScaleFactor
         suv_scale = self.ds.get((0x7053, 0x1000))
 
         if suv_scale:
@@ -136,8 +136,8 @@ class SUVConverter:
         return self._analyze_standard()
 
     def _analyze_standard(self):
-        """標準的なBq/ml からのSUV計算"""
-        # 必要な情報を収集
+        """Standard SUV calculation from Bq/ml"""
+        # Collect required information
         patient_weight = getattr(self.ds, 'PatientWeight', None)
 
         rp_info = None
@@ -173,32 +173,32 @@ class SUVConverter:
 
     def get_suv_scale_factor(self):
         """
-        SUV変換係数を取得
+        Get SUV conversion factor
 
         Returns:
-            float: ピクセル値をこの値で割るとSUVになる
-                   Noneの場合は手動計算が必要
+            float: Divide pixel value by this to get SUV
+                   None if manual calculation is required
         """
         if self.suv_info['method'] == 'TOSHIBA_SUVbw_X100':
             return 100.0
         elif self.suv_info['method'] == 'TOSHIBA_SUVbw':
             return 1.0
         elif self.suv_info['method'] == 'PHILIPS_SUV_SCALE':
-            # Philipsは乗算なので逆数
+            # Philips uses multiplication, so return inverse
             return 1.0 / self.suv_info['scale_factor']
         else:
             return None
 
     def calculate_suv_from_bqml(self, bqml_value, acquisition_time=None):
         """
-        Bq/ml値からSUVbwを計算
+        Calculate SUVbw from Bq/ml values
 
         Args:
-            bqml_value: Bq/ml 値（numpy array可）
-            acquisition_time: 撮像時刻（HHMMSSまたはHHMMSS.ffffff形式）
+            bqml_value: Bq/ml value (numpy array supported)
+            acquisition_time: Acquisition time (HHMMSS or HHMMSS.ffffff format)
 
         Returns:
-            SUVbw値
+            SUVbw values
         """
         if not self.suv_info.get('needs_calculation', True):
             raise ValueError("This data doesn't need Bq/ml calculation")
@@ -217,7 +217,7 @@ class SUVConverter:
             acquisition_time = getattr(self.ds, 'AcquisitionTime',
                                       getattr(self.ds, 'SeriesTime', None))
 
-        # 時間差を計算（秒）
+        # Calculate time difference (seconds)
         def parse_time(t):
             t_str = str(t).split('.')[0]
             if len(t_str) >= 6:
@@ -226,21 +226,21 @@ class SUVConverter:
 
         time_diff = parse_time(acquisition_time) - parse_time(start_time)
         if time_diff < 0:
-            time_diff += 24 * 3600  # 日をまたいだ場合
+            time_diff += 24 * 3600  # Handle day crossing
 
-        # 減衰補正
+        # Decay correction
         decay_factor = np.exp(-np.log(2) * time_diff / half_life)
         corrected_dose = injected_dose * decay_factor
 
         # SUVbw = Activity(Bq/ml) / (CorrectedDose(Bq) / Weight(g))
-        # Weight を g に変換 (kg * 1000)
+        # Convert weight to grams (kg * 1000)
         suv = bqml_value / (corrected_dose / (weight * 1000))
 
         return suv
 
     def convert_to_suv(self, pixel_data):
         """
-        ピクセルデータをSUVに変換
+        Convert pixel data to SUV
 
         Args:
             pixel_data: numpy array of pixel values
@@ -253,17 +253,17 @@ class SUVConverter:
         if scale is not None:
             return pixel_data / scale
         else:
-            # Bq/ml からの計算が必要
+            # Calculation from Bq/ml required
             rescale_slope = float(getattr(self.ds, 'RescaleSlope', 1))
             rescale_intercept = float(getattr(self.ds, 'RescaleIntercept', 0))
 
-            # Rescale適用
+            # Apply rescale
             bqml = pixel_data * rescale_slope + rescale_intercept
 
             return self.calculate_suv_from_bqml(bqml)
 
     def print_info(self):
-        """SUV変換情報を表示"""
+        """Display SUV conversion information"""
         print(f"\n{'='*60}")
         print(f"PET SUV Conversion Info")
         print(f"{'='*60}")
@@ -284,14 +284,14 @@ class SUVConverter:
 
 def detect_suv_scale(dicom_dir):
     """
-    DICOMフォルダからSUVスケール係数を検出
+    Detect SUV scale factor from DICOM folder
 
     Args:
-        dicom_dir: PET DICOMフォルダのパス
+        dicom_dir: Path to PET DICOM folder
 
     Returns:
         tuple: (scale_factor, method_description)
-               scale_factor がNoneの場合はBq/mlからの計算が必要
+               scale_factor is None if calculation from Bq/ml is required
     """
     converter = SUVConverter(dicom_dir)
     converter.print_info()
@@ -299,7 +299,7 @@ def detect_suv_scale(dicom_dir):
 
 
 if __name__ == "__main__":
-    # テスト
+    # Test
     import sys
 
     if len(sys.argv) > 1:
@@ -312,9 +312,9 @@ if __name__ == "__main__":
     converter = SUVConverter(dicom_dir)
     converter.print_info()
 
-    # テスト変換
+    # Test conversion
     scale = converter.get_suv_scale_factor()
     if scale:
-        test_value = 500  # 仮のピクセル値
+        test_value = 500  # Sample pixel value
         suv = test_value / scale
         print(f"Test: Pixel value {test_value} -> SUV {suv:.3f}")

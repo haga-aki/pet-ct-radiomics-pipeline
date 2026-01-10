@@ -1,12 +1,12 @@
 # PET-CT Radiomics Pipeline - Cross-platform Environment
-# バージョン互換性問題を解決するため、明示的にバージョンを固定
+# Version compatibility issues resolved with explicit version pinning
 #
-# 使用方法:
+# Usage:
 #   conda env create -f environment.yml
 #   conda activate med_ai
 #
-# 注意: PyTorch 2.2.x と TotalSegmentator 2.11.0 の互換性問題を解決済み
-#       NumPy 2.x と PyRadiomics の競合を解決済み
+# Note: PyTorch 2.2.x and TotalSegmentator 2.11.0 compatibility issues resolved
+#       NumPy 2.x and PyRadiomics conflict resolved
 
 name: med_ai
 channels:
@@ -18,15 +18,15 @@ dependencies:
   # Python
   - python=3.10
 
-  # --- 重要: バージョン固定 ---
-  # NumPy: 1.x系を使用（NumPy 2.xはPyTorch/TotalSegmentatorと非互換）
+  # --- Important: Version pinning ---
+  # NumPy: Use 1.x series (NumPy 2.x is incompatible with PyTorch/TotalSegmentator)
   - numpy>=1.26,<2.0
 
-  # PyTorch: 2.4以上を推奨（torch._dynamo互換性のため）
+  # PyTorch: 2.4+ recommended (for torch._dynamo compatibility)
   - pytorch>=2.4
   - torchvision
 
-  # 基本ライブラリ
+  # Core libraries
   - pandas>=2.0
   - matplotlib>=3.7
   - pyyaml>=6.0
@@ -36,27 +36,27 @@ dependencies:
   - pillow>=10.0
   - tqdm
 
-  # 医療画像処理（conda-forge）
+  # Medical image processing (conda-forge)
   - simpleitk>=2.3
   - nibabel>=5.0
 
   - pip
   - pip:
-    # DICOM処理
+    # DICOM processing
     - pydicom>=2.4
     - dicom2nifti>=2.4
     - python-gdcm>=3.0
 
-    # セグメンテーション
-    # TotalSegmentator 2.x系（nnunetv2依存）
+    # Segmentation
+    # TotalSegmentator 2.x series (depends on nnunetv2)
     - TotalSegmentator>=2.0,<3.0
 
-    # Radiomics特徴量抽出
-    # 注意: pyradiomics 3.1.1はNumPy 1.x系と互換
+    # Radiomics feature extraction
+    # Note: pyradiomics 3.1.1 is compatible with NumPy 1.x series
     - pyradiomics>=3.0,<4.0
 
-    # 可視化
+    # Visualization
     - seaborn>=0.12
 
-    # その他
+    # Other
     - imageio>=2.30

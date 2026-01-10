@@ -2,16 +2,16 @@
 Mask Verification Visualization
 ==============================
 
-縦隔条件のPET-CT融合画像にマスクをオーバーレイして表示
-Axial + Coronal の2面で表示
+PET-CT fusion images with mediastinal window and mask overlay
+Displays Axial + Coronal views
 
-臓器:
-- 肝臓 (liver)
-- 両側腎 (kidney_left, kidney_right)
-- 両側副腎 (adrenal_gland_left, adrenal_gland_right)
-- L1椎体 (vertebrae_L1)
-- 大動脈 (aorta)
-- 左肺 (lung_upper_lobe_left, lung_lower_lobe_left)
+Organs:
+- Liver
+- Bilateral kidneys (kidney_left, kidney_right)
+- Bilateral adrenal glands (adrenal_gland_left, adrenal_gland_right)
+- L1 vertebra (vertebrae_L1)
+- Aorta
+- Left lung (lung_upper_lobe_left, lung_lower_lobe_left)
 """
 
 import numpy as np
@@ -23,10 +23,10 @@ import yaml
 
 
 def load_config(config_path="config.yaml"):
-    """設定ファイルの読み込み"""
+    """Load configuration file"""
     default_config = {
         'visualization': {
-            'ct_window': {'level': 40, 'width': 400},  # 縦隔条件
+            'ct_window': {'level': 40, 'width': 400},  # Mediastinal window
             'pet_colormap': 'hot',
             'pet_suv_range': {'min': 0, 'max': 10},
             'mask_alpha': 0.3
@@ -42,9 +42,9 @@ def load_config(config_path="config.yaml"):
 
 def apply_ct_window(ct_data, level=40, width=400):
     """
-    CTデータにウィンドウ設定を適用
+    Apply window settings to CT data
 
-    デフォルト: 縦隔条件 (WL=40, WW=400)
+    Default: Mediastinal window (WL=40, WW=400)
     """
     min_val = level - width / 2
     max_val = level + width / 2
@@ -54,22 +54,22 @@ def apply_ct_window(ct_data, level=40, width=400):
 
 
 def create_organ_colormap():
-    """臓器ごとの色を定義（代表8臓器）"""
+    """Define colors for each organ (representative 8 organs)"""
     organ_colors = {
-        'liver': [0.8, 0.4, 0.0, 0.6],           # オレンジ
-        'spleen': [0.6, 0.0, 0.6, 0.6],          # 紫
-        'kidney_left': [0.0, 0.6, 0.8, 0.6],     # シアン
-        'kidney_right': [0.0, 0.8, 0.6, 0.6],    # ティール
-        'adrenal_gland_left': [0.8, 0.8, 0.0, 0.6],   # 黄
-        'adrenal_gland_right': [1.0, 0.6, 0.0, 0.6],  # オレンジ黄
-        'aorta': [0.8, 0.0, 0.0, 0.6],           # 赤
-        'vertebrae_L1': [0.0, 0.4, 0.8, 0.6],    # 青
+        'liver': [0.8, 0.4, 0.0, 0.6],           # Orange
+        'spleen': [0.6, 0.0, 0.6, 0.6],          # Purple
+        'kidney_left': [0.0, 0.6, 0.8, 0.6],     # Cyan
+        'kidney_right': [0.0, 0.8, 0.6, 0.6],    # Teal
+        'adrenal_gland_left': [0.8, 0.8, 0.0, 0.6],   # Yellow
+        'adrenal_gland_right': [1.0, 0.6, 0.0, 0.6],  # Orange-yellow
+        'aorta': [0.8, 0.0, 0.0, 0.6],           # Red
+        'vertebrae_L1': [0.0, 0.4, 0.8, 0.6],    # Blue
     }
     return organ_colors
 
 
 def load_masks(seg_dir, organs):
-    """マスクファイルを読み込み"""
+    """Load mask files"""
     masks = {}
     for organ in organs:
         mask_path = seg_dir / f"{organ}.nii.gz"
@@ -80,20 +80,20 @@ def load_masks(seg_dir, organs):
 
 def create_mask_verification(case_id, nifti_dir=None, seg_dir=None, output_dir=None):
     """
-    マスク検証画像を作成
+    Create mask verification image
 
     Parameters:
     -----------
     case_id : str
-        患者ID (例: "ILD_001")
+        Patient ID (e.g., "ILD_001")
     nifti_dir : Path, optional
-        NIfTIファイルのディレクトリ
+        NIfTI files directory
     seg_dir : Path, optional
-        セグメンテーションファイルのディレクトリ
+        Segmentation files directory
     output_dir : Path, optional
-        出力ディレクトリ
+        Output directory
     """
-    # デフォルトパス設定
+    # Default path configuration
     root_dir = Path(__file__).parent.resolve()
     if nifti_dir is None:
         nifti_dir = root_dir / "nifti_images"
@@ -104,17 +104,17 @@ def create_mask_verification(case_id, nifti_dir=None, seg_dir=None, output_dir=N
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # 設定読み込み
+    # Load configuration
     config = load_config()
     viz_config = config['visualization']
 
-    # ファイルパス
+    # File paths
     ct_path = nifti_dir / f"{case_id}_CT.nii.gz"
     pet_path = nifti_dir / f"{case_id}_PET_registered.nii.gz"
     if not pet_path.exists():
         pet_path = nifti_dir / f"{case_id}_PET.nii.gz"
 
-    # データ読み込み
+    # Load data
     print(f"Loading CT: {ct_path}")
     ct_img = nib.load(str(ct_path))
     ct_data = ct_img.get_fdata()
@@ -124,13 +124,13 @@ def create_mask_verification(case_id, nifti_dir=None, seg_dir=None, output_dir=N
         print(f"Loading PET: {pet_path}")
         pet_img = nib.load(str(pet_path))
         pet_data = pet_img.get_fdata()
-        # SUV正規化
+        # SUV normalization
         suv_min = viz_config['pet_suv_range']['min']
         suv_max = viz_config['pet_suv_range']['max']
         pet_normalized = np.clip(pet_data, suv_min, suv_max)
         pet_normalized = (pet_normalized - suv_min) / (suv_max - suv_min)
 
-    # マスク読み込み（代表8臓器）
+    # Load masks (representative 8 organs)
     organs = [
         'liver',
         'spleen',
@@ -144,31 +144,31 @@ def create_mask_verification(case_id, nifti_dir=None, seg_dir=None, output_dir=N
 
     print(f"Loaded masks: {list(masks.keys())}")
 
-    # CT画像に縦隔条件を適用
+    # Apply mediastinal window to CT
     ct_level = viz_config['ct_window']['level']
     ct_width = viz_config['ct_window']['width']
     ct_windowed = apply_ct_window(ct_data, level=ct_level, width=ct_width)
 
-    # 画像の形状
+    # Image shape
     shape = ct_data.shape
     print(f"Image shape: {shape}")
 
-    # スライス位置の決定（各臓器の中心を含むスライス）
+    # Determine slice positions (slices containing each organ's center)
     slice_positions = find_representative_slices(masks, shape)
 
-    # Axial + Coronal 画像を作成
+    # Create Axial + Coronal images
     fig, axes = plt.subplots(2, 3, figsize=(18, 12))
     fig.suptitle(f'PET-CT Mask Verification - {case_id}\n'
                  f'CT Window: Mediastinal (WL={ct_level}, WW={ct_width})',
                  fontsize=14, fontweight='bold')
 
-    # Axial スライス（3枚）
+    # Axial slices (3 images)
     axial_slices = slice_positions.get('axial', [shape[2]//4, shape[2]//2, shape[2]*3//4])
     for i, z in enumerate(axial_slices[:3]):
         ax = axes[0, i]
         z = min(z, shape[2]-1)
 
-        # PET-CT融合画像
+        # PET-CT fusion image
         ct_slice = ct_windowed[:, :, z]
         if pet_data is not None:
             pet_slice = pet_normalized[:, :, z]
@@ -176,11 +176,11 @@ def create_mask_verification(case_id, nifti_dir=None, seg_dir=None, output_dir=N
         else:
             fused = np.stack([ct_slice]*3, axis=-1)
 
-        # 画像表示（回転して正しい向きに）
+        # Display image (rotate for correct orientation)
         fused_rotated = np.rot90(fused)
         ax.imshow(fused_rotated, origin='lower')
 
-        # マスクオーバーレイ
+        # Mask overlay
         for organ, mask_data in masks.items():
             if organ in organ_colors:
                 mask_slice = np.rot90(mask_data[:, :, z])
@@ -190,13 +190,13 @@ def create_mask_verification(case_id, nifti_dir=None, seg_dir=None, output_dir=N
         ax.set_title(f'Axial (z={z})', fontsize=11)
         ax.axis('off')
 
-    # Coronal スライス（3枚）
+    # Coronal slices (3 images)
     coronal_slices = slice_positions.get('coronal', [shape[1]//4, shape[1]//2, shape[1]*3//4])
     for i, y in enumerate(coronal_slices[:3]):
         ax = axes[1, i]
         y = min(y, shape[1]-1)
 
-        # PET-CT融合画像
+        # PET-CT fusion image
         ct_slice = ct_windowed[:, y, :]
         if pet_data is not None:
             pet_slice = pet_normalized[:, y, :]
@@ -204,11 +204,11 @@ def create_mask_verification(case_id, nifti_dir=None, seg_dir=None, output_dir=N
         else:
             fused = np.stack([ct_slice]*3, axis=-1)
 
-        # 画像表示
+        # Display image
         fused_rotated = np.rot90(fused)
         ax.imshow(fused_rotated, origin='lower')
 
-        # マスクオーバーレイ
+        # Mask overlay
         for organ, mask_data in masks.items():
             if organ in organ_colors:
                 mask_slice = np.rot90(mask_data[:, y, :])
@@ -218,12 +218,12 @@ def create_mask_verification(case_id, nifti_dir=None, seg_dir=None, output_dir=N
         ax.set_title(f'Coronal (y={y})', fontsize=11)
         ax.axis('off')
 
-    # 凡例追加
+    # Add legend
     add_legend(fig, organ_colors, masks.keys())
 
     plt.tight_layout(rect=[0, 0.08, 1, 0.95])
 
-    # 保存
+    # Save
     output_path = output_dir / "mask_verification.png"
     plt.savefig(output_path, dpi=150, bbox_inches='tight',
                 facecolor='black', edgecolor='none')
@@ -234,16 +234,16 @@ def create_mask_verification(case_id, nifti_dir=None, seg_dir=None, output_dir=N
 
 
 def find_representative_slices(masks, shape):
-    """臓器の位置からスライス位置を決定"""
+    """Determine slice positions from organ locations"""
     positions = {'axial': [], 'coronal': []}
 
-    # 肝臓の中心
+    # Liver center
     if 'liver' in masks:
         z_indices = np.where(masks['liver'].sum(axis=(0, 1)) > 0)[0]
         if len(z_indices) > 0:
             positions['axial'].append(int(np.median(z_indices)))
 
-    # 腎臓の中心
+    # Kidney center
     for kidney in ['kidney_left', 'kidney_right']:
         if kidney in masks:
             z_indices = np.where(masks[kidney].sum(axis=(0, 1)) > 0)[0]
@@ -251,13 +251,13 @@ def find_representative_slices(masks, shape):
                 positions['axial'].append(int(np.median(z_indices)))
                 break
 
-    # L1椎体の中心
+    # L1 vertebra center
     if 'vertebrae_L1' in masks:
         z_indices = np.where(masks['vertebrae_L1'].sum(axis=(0, 1)) > 0)[0]
         if len(z_indices) > 0:
             positions['axial'].append(int(np.median(z_indices)))
 
-    # Coronalスライス: 大動脈、腎臓、左肺を含む位置
+    # Coronal slices: positions containing aorta, kidney, left lung
     if 'aorta' in masks:
         y_indices = np.where(masks['aorta'].sum(axis=(0, 2)) > 0)[0]
         if len(y_indices) > 0:
@@ -274,13 +274,13 @@ def find_representative_slices(masks, shape):
         if len(y_indices) > 0:
             positions['coronal'].append(int(np.median(y_indices)))
 
-    # デフォルト値で補完
+    # Fill with default values
     if len(positions['axial']) < 3:
         positions['axial'].extend([shape[2]//4, shape[2]//2, shape[2]*3//4])
     if len(positions['coronal']) < 3:
         positions['coronal'].extend([shape[1]//4, shape[1]//2, shape[1]*3//4])
 
-    # 重複除去と並び替え
+    # Remove duplicates and sort
     positions['axial'] = sorted(list(set(positions['axial'])))[:3]
     positions['coronal'] = sorted(list(set(positions['coronal'])))[:3]
 
@@ -288,16 +288,16 @@ def find_representative_slices(masks, shape):
 
 
 def create_fused_image(ct_slice, pet_slice, pet_alpha=0.5):
-    """CT画像とPET画像を融合"""
-    # CTをグレースケールのRGB
+    """Fuse CT and PET images"""
+    # CT as grayscale RGB
     ct_rgb = np.stack([ct_slice] * 3, axis=-1)
 
-    # PETをホットカラーマップで変換
+    # PET with hot colormap
     cmap = plt.cm.hot
     pet_colored = cmap(pet_slice)[:, :, :3]
 
-    # 融合（PETを重ねる）
-    mask = pet_slice > 0.1  # 低値をマスク
+    # Fusion (overlay PET)
+    mask = pet_slice > 0.1  # Mask low values
     fused = ct_rgb.copy()
     fused[mask] = (1 - pet_alpha) * ct_rgb[mask] + pet_alpha * pet_colored[mask]
 
@@ -305,11 +305,11 @@ def create_fused_image(ct_slice, pet_slice, pet_alpha=0.5):
 
 
 def overlay_mask(ax, mask_slice, color):
-    """マスクをオーバーレイ"""
+    """Overlay mask on image"""
     if mask_slice.sum() == 0:
         return
 
-    # マスクの輪郭を描画
+    # Draw mask contour
     from matplotlib.colors import to_rgba
     rgba = to_rgba(color[:3], alpha=color[3])
 
@@ -321,9 +321,9 @@ def overlay_mask(ax, mask_slice, color):
 
 
 def add_legend(fig, organ_colors, available_organs):
-    """凡例を追加"""
-    # 臓器名マッピング（代表8臓器）
-    organ_names_jp = {
+    """Add legend"""
+    # Organ name mapping (representative 8 organs)
+    organ_names = {
         'liver': 'Liver',
         'spleen': 'Spleen',
         'kidney_left': 'L Kidney',
@@ -338,7 +338,7 @@ def add_legend(fig, organ_colors, available_organs):
     for organ in organ_colors:
         if organ in available_organs:
             color = organ_colors[organ][:3]
-            name = organ_names_jp.get(organ, organ)
+            name = organ_names.get(organ, organ)
             from matplotlib.patches import Patch
             legend_elements.append(Patch(facecolor=color, edgecolor='white',
                                         label=name, alpha=0.7))

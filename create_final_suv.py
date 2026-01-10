@@ -87,13 +87,13 @@ def process_patient(patient_id, extractor):
 
     results = []
 
-    # パス設定
+    # Path configuration
     pet_reg_path = NIFTI_DIR / f"{patient_id}_PET_registered.nii.gz"
     suv_output_path = NIFTI_DIR / f"{patient_id}_PET_SUV.nii.gz"
     ct_path = NIFTI_DIR / f"{patient_id}_CT.nii.gz"
     seg_dir = SEG_DIR / patient_id
 
-    # セグメンテーションディレクトリがない場合は_CT付きを試す
+    # Try with _CT suffix if segmentation directory not found
     if not seg_dir.exists():
         seg_dir = SEG_DIR / f"{patient_id}_CT"
 
@@ -101,10 +101,10 @@ def process_patient(patient_id, extractor):
         print(f"  Segmentation directory not found for {patient_id}")
         return results
 
-    # PET画像があるか確認
+    # Check if PET image exists
     if not pet_reg_path.exists():
         print(f"  PET registered image not found: {pet_reg_path.name}")
-        # CTのみの場合はCT Radiomicsだけ抽出
+        # CT only case: extract CT Radiomics only
         if ct_path.exists():
             print("  Processing CT only...")
             for organ in ORGANS:
@@ -121,8 +121,8 @@ def process_patient(patient_id, extractor):
                         print(f"    {organ}: ERROR - {e}")
         return results
 
-    # 1. SUV画像を作成（メーカー自動検出）
-    print("\n【1. SUV画像作成】")
+    # 1. Create SUV image (auto-detect vendor)
+    print("\n[1. SUV Image Creation]")
 
     pet_dicom_dir = find_pet_dicom_folder(patient_id)
     if pet_dicom_dir:
@@ -134,20 +134,20 @@ def process_patient(patient_id, extractor):
             data = img.get_fdata()
             suv_data = converter.convert_to_suv(data)
 
-            print(f"  変換後: max={suv_data.max():.2f} (SUVbw)")
+            print(f"  Converted: max={suv_data.max():.2f} (SUVbw)")
 
             suv_img = nib.Nifti1Image(suv_data.astype(np.float32), img.affine, img.header)
             nib.save(suv_img, suv_output_path)
-            print(f"  保存: {suv_output_path.name}")
+            print(f"  Saved: {suv_output_path.name}")
         except Exception as e:
-            print(f"  SUV変換エラー: {e}")
+            print(f"  SUV conversion error: {e}")
             return results
     else:
-        print(f"  PET DICOMフォルダが見つかりません")
+        print(f"  PET DICOM folder not found")
         return results
 
-    # 2. Radiomics抽出
-    print("\n【2. Radiomics抽出】")
+    # 2. Radiomics extraction
+    print("\n[2. Radiomics Extraction]")
 
     # CT Radiomics
     if ct_path.exists():
