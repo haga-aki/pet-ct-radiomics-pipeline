@@ -2,12 +2,12 @@
 PET-CT Radiomics Pipeline
 =========================
 
-DICOMからNIfTI変換 → TotalSegmentatorでセグメンテーション → PyRadiomicsで特徴量抽出
+DICOM to NIfTI conversion -> TotalSegmentator segmentation -> PyRadiomics feature extraction
 
-改善点 (v2.0):
-- DICOMシリーズ自動選別機能（本体CTとPETを自動判別）
-- 依存関係バージョン固定（PyTorch 2.4+, NumPy 1.x）
-- 入力検証の強化
+Improvements (v2.0):
+- Automatic DICOM series selection (auto-detect main CT and PET volumes)
+- Dependency version pinning (PyTorch 2.4+, NumPy 1.x)
+- Enhanced input validation
 """
 
 import sys
@@ -41,7 +41,7 @@ except ImportError:
 
 
 def load_config(config_path="config.yaml"):
-    """設定ファイルの読み込み"""
+    """Load configuration from YAML file"""
     default_config = {
         'organs': [
             'liver',
@@ -58,9 +58,9 @@ def load_config(config_path="config.yaml"):
         },
         'output': {'csv_file': 'radiomics_results.csv', 'include_diagnostics': False},
         'dicom_selection': {
-            'auto_select': True,  # シリーズ自動選別
-            'min_ct_slices': 100,  # CTの最小スライス数
-            'min_pet_slices': 50,  # PETの最小スライス数
+            'auto_select': True,  # Auto-select DICOM series
+            'min_ct_slices': 100,  # Minimum CT slice count
+            'min_pet_slices': 50,  # Minimum PET slice count
         }
     }
     if Path(config_path).exists():
@@ -76,7 +76,7 @@ def load_config(config_path="config.yaml"):
 
 
 def get_root_dir():
-    """ルートディレクトリの取得"""
+    """Get root directory"""
     if os.environ.get("PET_PIPELINE_ROOT"):
         return Path(os.environ["PET_PIPELINE_ROOT"])
     return Path(__file__).parent.resolve()
@@ -95,7 +95,7 @@ for p in [NIFTI_DIR, SEG_DIR]:
 
 
 def check_gpu_memory():
-    """GPU可用性とメモリ状態の確認"""
+    """Check GPU availability and memory status"""
     if not TORCH_AVAILABLE:
         return False, "PyTorch not available"
 
@@ -121,13 +121,13 @@ def check_gpu_memory():
 
 
 def log_progress(message, level="INFO"):
-    """進捗メッセージの出力"""
+    """Output progress message with timestamp"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{timestamp}] [{level}] {message}")
 
 
 def get_or_create_anon_id(original_folder_name):
-    """匿名IDの取得または作成"""
+    """Get or create anonymized ID for patient folder"""
     mapping = {}
     if ID_MAP_FILE.exists():
         with open(ID_MAP_FILE, mode='r', encoding='utf-8') as f:
@@ -152,22 +152,22 @@ def get_or_create_anon_id(original_folder_name):
 
 def scan_dicom_series(patient_path):
     """
-    DICOMシリーズをスキャンして情報を収集
+    Scan DICOM series and collect metadata
 
     Returns:
-        list of dict: 各シリーズの情報
-            - path: シリーズのパス
-            - modality: CT/PT/MR等
-            - series_description: シリーズ説明
-            - num_slices: スライス数
-            - image_size: 画像サイズ (rows, cols)
+        list of dict: Information for each series
+            - path: Series directory path
+            - modality: CT/PT/MR etc.
+            - series_description: Series description
+            - num_slices: Number of slices
+            - image_size: Image dimensions (rows, cols)
     """
     if not PYDICOM_AVAILABLE:
         return []
 
     series_info = []
 
-    # サブフォルダを探索
+    # Explore subdirectories
     subdirs = [d for d in patient_path.iterdir() if d.is_dir()]
     if not subdirs:
         subdirs = [patient_path]
@@ -175,14 +175,14 @@ def scan_dicom_series(patient_path):
     for subdir in subdirs:
         dcm_files = list(subdir.glob("*.dcm")) + list(subdir.glob("*.DCM"))
         if not dcm_files:
-            # ファイル拡張子なしのDICOMも検索
+            # Also search for DICOM files without extension
             dcm_files = [f for f in subdir.iterdir() if f.is_file() and not f.suffix]
 
         if not dcm_files:
             continue
 
         try:
-            # 最初のDICOMファイルからメタデータを取得
+            # Get metadata from the first DICOM file
             dcm = pydicom.dcmread(str(dcm_files[0]), stop_before_pixels=True)
 
             modality = getattr(dcm, 'Modality', 'UNKNOWN')
@@ -190,11 +190,11 @@ def scan_dicom_series(patient_path):
             rows = getattr(dcm, 'Rows', 0)
             cols = getattr(dcm, 'Columns', 0)
 
-            # 画像品質チェック用の追加メタデータ
+            # Additional metadata for image quality check
             photometric = getattr(dcm, 'PhotometricInterpretation', '')
             samples_per_pixel = getattr(dcm, 'SamplesPerPixel', 1)
             image_type_raw = getattr(dcm, 'ImageType', [])
-            # pydicom.multival.MultiValue や通常のリストを処理
+            # Handle pydicom.multival.MultiValue or regular list
             if hasattr(image_type_raw, '__iter__') and not isinstance(image_type_raw, str):
                 image_type = [str(t) for t in image_type_raw]
             elif image_type_raw:
@@ -221,20 +221,20 @@ def scan_dicom_series(patient_path):
 
 def is_valid_grayscale_image(series):
     """
-    グレースケール画像かどうかを判定
+    Determine if the image is grayscale.
 
-    有効な条件:
-    - PhotometricInterpretation: MONOCHROME1 または MONOCHROME2
+    Valid conditions:
+    - PhotometricInterpretation: MONOCHROME1 or MONOCHROME2
     - SamplesPerPixel: 1
 
-    除外すべき画像:
-    - RGB/RGBA画像 (SamplesPerPixel=3 or 4)
-    - カラー画像 (PhotometricInterpretation: RGB, YBR_*, PALETTE COLOR)
+    Images to exclude:
+    - RGB/RGBA images (SamplesPerPixel=3 or 4)
+    - Color images (PhotometricInterpretation: RGB, YBR_*, PALETTE COLOR)
     """
     photometric = series.get('photometric_interpretation', '')
     samples = series.get('samples_per_pixel', 1)
 
-    # グレースケール画像のみ許可
+    # Only allow grayscale images
     valid_photometric = photometric in ['MONOCHROME1', 'MONOCHROME2', '']
     valid_samples = samples == 1
 
@@ -243,31 +243,31 @@ def is_valid_grayscale_image(series):
 
 def is_derived_or_secondary(series):
     """
-    派生画像・二次画像かどうかを判定（厳格モード）
+    Determine if the image is derived or secondary (strict mode).
 
-    この関数は「PRIMARY/ORIGINAL画像のみ」を選択する最初のフィルタとして使用。
-    TrueならDERIVED/SECONDARYとして除外候補となるが、
-    select_best_series()でフォールバックにより再検討される。
+    This function is used as a first-pass filter for "PRIMARY/ORIGINAL images only".
+    If True, it becomes a candidate for exclusion as DERIVED/SECONDARY,
+    but may be reconsidered via fallback in select_best_series().
 
-    判定基準:
-    1. ImageTypeに DERIVED または SECONDARY が含まれる
-    2. SeriesDescriptionに問題キーワードが含まれる
+    Criteria:
+    1. ImageType contains DERIVED or SECONDARY
+    2. SeriesDescription contains problematic keywords
 
     Note:
-    - PET-CTでは減弱補正CTがDERIVEDとしてマークされることが多い
-    - この関数でTrueでも、_is_unusable_series()でFalseなら使用可能
-    - 最終的な選択は select_best_series() のフォールバックロジックで決定
+    - In PET-CT, attenuation correction CT is often marked as DERIVED
+    - Even if True here, usable if _is_unusable_series() returns False
+    - Final selection is determined by fallback logic in select_best_series()
     """
     image_type = series.get('image_type', [])
     series_desc = series.get('series_description', '').lower()
 
-    # ImageTypeチェック
+    # ImageType check
     excluded_image_types = ['DERIVED', 'SECONDARY']
     for img_type in image_type:
         if isinstance(img_type, str) and img_type.upper() in excluded_image_types:
             return True
 
-    # SeriesDescriptionチェック（参考情報として）
+    # SeriesDescription check (supplementary information)
     excluded_keywords = ['mip', 'fusion', 'scout', 'localizer', 'report',
                          'screen', 'capture', 'presentation', 'dose']
     for keyword in excluded_keywords:
@@ -279,49 +279,49 @@ def is_derived_or_secondary(series):
 
 def _is_unusable_series(series):
     """
-    本当に使用不可なシリーズかどうかを判定（最終フィルタ）
+    Determine if the series is truly unusable (final filter).
 
-    is_derived_or_secondary()でDERIVED/SECONDARYと判定されたシリーズに対して、
-    実際に使用不可かどうかを再判定する。
+    Re-evaluates series identified as DERIVED/SECONDARY by is_derived_or_secondary()
+    to determine if they are actually unusable.
 
-    使用不可（常にTrue）:
-    - FUSION: 融合画像（通常RGB/カラー）
-    - SCOUT/LOCALIZER: 位置決め画像
-    - REPORT/DOSE: レポート・線量情報
-    - SCREEN SAVE: スクリーンキャプチャ
+    Always unusable (returns True):
+    - FUSION: Fusion images (usually RGB/color)
+    - SCOUT/LOCALIZER: Positioning images
+    - REPORT/DOSE: Report and dose information
+    - SCREEN SAVE: Screen captures
 
-    条件付き使用可能:
-    - MIP: スライス数 >= 50 なら許可（警告付き）
-      理由: 一部のPET-CTスキャナーはボリュームPETに"MIP"という名前を付ける
-      真のMIPは通常1〜数スライスのみ
+    Conditionally usable:
+    - MIP: Allowed if num_slices >= 50 (with warning)
+      Reason: Some PET-CT scanners name volume PET as "MIP"
+      True MIP typically has only 1 to a few slices
 
-    使用可能（False）:
-    - 上記以外のDERIVED/SECONDARY
-    - PET-CTの減弱補正CT（DERIVED）など
+    Usable (returns False):
+    - Other DERIVED/SECONDARY series
+    - PET-CT attenuation correction CT (DERIVED), etc.
 
     Returns:
-        bool: True=使用不可、False=使用可能
+        bool: True=unusable, False=usable
     """
     series_desc = series.get('series_description', '').lower()
     image_type = series.get('image_type', [])
     num_slices = series.get('num_slices', 0)
 
-    # 常に除外するキーワード（放射線特徴量抽出に不適切）
+    # Keywords always excluded (unsuitable for radiomics feature extraction)
     always_unusable = ['fusion', 'scout', 'localizer', 'report',
                        'screen', 'capture', 'dose', 'presentation']
     for keyword in always_unusable:
         if keyword in series_desc:
             return True
 
-    # MIPはスライス数で判定
-    # - スライス数 < 50: 真のMIP（投影画像）→ 除外
-    # - スライス数 >= 50: ボリュームデータの可能性が高い → 許可（警告付き）
-    # この閾値は経験的なもので、設定で変更可能にすることを検討
+    # MIP determination based on slice count
+    # - num_slices < 50: True MIP (projection image) -> exclude
+    # - num_slices >= 50: Likely volume data -> allow (with warning)
+    # This threshold is empirical; consider making it configurable
     if 'mip' in series_desc:
         if num_slices < 50:
-            return True  # 真のMIPは除外
+            return True  # Exclude true MIP
 
-    # ImageTypeにSCREEN SAVEが含まれる場合
+    # If ImageType contains SCREEN SAVE
     for img_type in image_type:
         if isinstance(img_type, str) and 'SCREEN' in img_type.upper():
             return True
@@ -331,24 +331,24 @@ def _is_unusable_series(series):
 
 def select_best_series(series_info, config):
     """
-    CT/PETの本体シリーズを自動選別
+    Auto-select the main CT/PET series.
 
-    選別ロジック:
-    1. グレースケール画像のみ (MONOCHROME1/2, SamplesPerPixel=1)
-       - RGB/RGBA画像（FUSION等）は除外
-    2. 使用不可シリーズを除外 (_is_unusable_series)
+    Selection logic:
+    1. Grayscale images only (MONOCHROME1/2, SamplesPerPixel=1)
+       - Exclude RGB/RGBA images (FUSION, etc.)
+    2. Exclude unusable series (_is_unusable_series)
        - FUSION/SCOUT/LOCALIZER/REPORT/DOSE/SCREEN SAVE
-       - MIPは条件付き: スライス数 < 50 なら除外、>= 50 なら許可
-    3. スライス数でフィルタリング（min_ct_slices, min_pet_slices）
-    4. CT: 512x512を優先、その中でスライス数最大
-    5. PET: スライス数最大
+       - MIP conditional: exclude if num_slices < 50, allow if >= 50
+    3. Filter by slice count (min_ct_slices, min_pet_slices)
+    4. CT: Prefer 512x512, then select maximum slice count
+    5. PET: Select maximum slice count
 
     Note:
-    - DERIVED/SECONDARYは除外しない（PET-CTでは本体がDERIVEDのことが多い）
-    - MIP名称でも多スライスならボリュームとして許可（警告付き）
+    - DERIVED/SECONDARY are NOT excluded (main series in PET-CT is often DERIVED)
+    - MIP-named series with many slices are allowed as volume (with warning)
 
     Returns:
-        dict: {'CT': path, 'PET': path} またはNone
+        dict: {'CT': path, 'PET': path} or None
     """
     selection_config = config.get('dicom_selection', {})
     min_ct_slices = selection_config.get('min_ct_slices', 100)
@@ -356,32 +356,32 @@ def select_best_series(series_info, config):
 
     selected = {}
 
-    # CTシリーズの選別
-    # 優先順位: グレースケール + unusableでない + スライス数最大
-    # PRIMARYよりスライス数を優先（PET-CTではDERIVED CTが本体であることが多い）
+    # CT series selection
+    # Priority: grayscale + not unusable + maximum slice count
+    # Prioritize slice count over PRIMARY (DERIVED CT is often the main series in PET-CT)
     ct_series = [s for s in series_info if s['modality'] == 'CT']
     if ct_series:
-        # Step 1: グレースケール画像のみフィルタリング（RGB/RGBA除外）
+        # Step 1: Filter grayscale images only (exclude RGB/RGBA)
         grayscale_ct = [s for s in ct_series if is_valid_grayscale_image(s)]
         if not grayscale_ct:
             log_progress("  Warning: No grayscale CT found", "WARNING")
         else:
-            # Step 2: unusableシリーズを除外（FUSION/MIP/SCOUT/REPORT等）
-            # DERIVED/SECONDARYは許可（PET-CTでは減弱補正CTがDERIVEDとしてマークされる）
+            # Step 2: Exclude unusable series (FUSION/MIP/SCOUT/REPORT, etc.)
+            # DERIVED/SECONDARY are allowed (attenuation correction CT is often marked DERIVED in PET-CT)
             usable_ct = [s for s in grayscale_ct if not _is_unusable_series(s)]
 
             if not usable_ct:
                 log_progress("  Warning: No usable CT found (all are FUSION/MIP/SCOUT/REPORT)", "WARNING")
             else:
-                # Step 3: スライス数でフィルタリング
+                # Step 3: Filter by slice count
                 valid_ct = [s for s in usable_ct if s['num_slices'] >= min_ct_slices]
 
                 if valid_ct:
-                    # 512x512の標準CTを優先、その中でスライス数最大を選択
+                    # Prefer 512x512 standard CT, then select maximum slice count
                     standard_ct = [s for s in valid_ct if s['image_size'] == (512, 512)]
                     candidates = standard_ct if standard_ct else valid_ct
 
-                    # スライス数最大のCTを選択（PRIMARY/DERIVEDは問わない）
+                    # Select CT with maximum slice count (regardless of PRIMARY/DERIVED)
                     best_ct = max(candidates, key=lambda x: x['num_slices'])
 
                     selected['CT'] = best_ct['path']
@@ -392,33 +392,33 @@ def select_best_series(series_info, config):
                                 f"Type={type_str}, "
                                 f"'{best_ct['series_description']}')", "INFO")
 
-    # PETシリーズの選別
-    # MIPは絶対に使用しない（MIPしかない場合はエラー）
+    # PET series selection
+    # Never use true MIP (error if only MIP available)
     pet_series = [s for s in series_info if s['modality'] in ['PT', 'PET']]
     if pet_series:
-        # Step 1: グレースケール画像のみフィルタリング
+        # Step 1: Filter grayscale images only
         grayscale_pet = [s for s in pet_series if is_valid_grayscale_image(s)]
         if not grayscale_pet:
             log_progress("  Warning: No grayscale PET found", "WARNING")
         else:
-            # Step 2: unusableシリーズを除外（MIP/REPORT等）
-            # MIPへのフォールバックは禁止
+            # Step 2: Exclude unusable series (MIP/REPORT, etc.)
+            # Fallback to MIP is prohibited
             usable_pet = [s for s in grayscale_pet if not _is_unusable_series(s)]
 
             if not usable_pet:
-                # MIPしかない場合はエラー（フォールバックしない）
+                # Error if only MIP available (no fallback)
                 log_progress("  ERROR: No usable PET found (only MIP/REPORT available). "
                             "Volumetric PET data is required for radiomics.", "ERROR")
-                # PETは選択しない（CTのみで処理続行、または呼び出し元でエラー処理）
+                # PET is not selected (continue with CT only, or handle error at caller)
             else:
-                # Step 3: スライス数でフィルタリング
+                # Step 3: Filter by slice count
                 valid_pet = [s for s in usable_pet if s['num_slices'] >= min_pet_slices]
 
                 if valid_pet:
-                    # スライス数最大のPETを選択
+                    # Select PET with maximum slice count
                     best_pet = max(valid_pet, key=lambda x: x['num_slices'])
 
-                    # MIP名称だが多スライスの場合は警告
+                    # Warning if MIP-named but has many slices
                     if 'mip' in best_pet['series_description'].lower():
                         log_progress(f"  Warning: PET series has 'MIP' in name but {best_pet['num_slices']} slices. "
                                     "Treating as volumetric data.", "WARNING")
@@ -436,14 +436,14 @@ def select_best_series(series_info, config):
 
 def detect_folder_structure(patient_path, config):
     """
-    フォルダ構造を検出し、適切なモダリティパスを返す
+    Detect folder structure and return appropriate modality paths.
 
-    改善: DICOMシリーズ自動選別機能を追加
+    Enhancement: Added DICOM series auto-selection feature.
     """
     modalities = config['modalities']
     found = {}
 
-    # 従来の方式: CT/PETサブフォルダがある場合
+    # Legacy method: If CT/PET subfolders exist
     for mod in modalities:
         mod_path = patient_path / mod
         if mod_path.exists() and mod_path.is_dir():
@@ -452,7 +452,7 @@ def detect_folder_structure(patient_path, config):
     if found:
         return found
 
-    # 新方式: DICOMシリーズ自動選別
+    # New method: DICOM series auto-selection
     if config.get('dicom_selection', {}).get('auto_select', True) and PYDICOM_AVAILABLE:
         log_progress(f"  Scanning DICOM series in {patient_path.name}...", "INFO")
         series_info = scan_dicom_series(patient_path)
@@ -474,13 +474,13 @@ def detect_folder_structure(patient_path, config):
             if selected:
                 return selected
 
-    # フォールバック: 直接DICOM処理
+    # Fallback: Direct DICOM processing
     found['CT'] = patient_path
     return found
 
 
 def step1_convert_dicom(dicom_path, anon_id, modality):
-    """DICOM → NIfTI変換"""
+    """DICOM to NIfTI conversion."""
     output_path = NIFTI_DIR / f"{anon_id}_{modality}.nii.gz"
     if output_path.exists():
         log_progress(f"{modality} NIfTI exists. Skipping.", "INFO")
@@ -499,7 +499,7 @@ def step1_convert_dicom(dicom_path, anon_id, modality):
 
 
 def step2_segmentation(nifti_path, anon_id, modality, ct_seg_dir=None, use_gpu=True):
-    """TotalSegmentatorによるセグメンテーション"""
+    """Segmentation using TotalSegmentator."""
     seg_config = CONFIG['segmentation']
     tasks = seg_config.get('tasks', {})
     task = tasks.get(modality, 'total')
@@ -539,7 +539,7 @@ def step2_segmentation(nifti_path, anon_id, modality, ct_seg_dir=None, use_gpu=T
                 totalsegmentator(input=nifti_path, output=output_folder, task=task,
                                fast=seg_config.get('fast', True), device=device)
 
-        # 結合マスクの作成
+        # Create combined mask
         all_files = sorted(list(output_folder.glob("*.nii.gz")))
         input_files = [p for p in all_files if "combined_" not in p.name]
         if not input_files:
@@ -564,7 +564,7 @@ def step2_segmentation(nifti_path, anon_id, modality, ct_seg_dir=None, use_gpu=T
 
 
 def resample_mask_to_image(mask_path, ref_image_path, output_path):
-    """マスクを参照画像空間にリサンプリング"""
+    """Resample mask to reference image space."""
     try:
         mask_img = sitk.ReadImage(str(mask_path))
         ref_img = sitk.ReadImage(str(ref_image_path))
@@ -583,7 +583,7 @@ def resample_mask_to_image(mask_path, ref_image_path, output_path):
 
 
 def resample_pet_to_ct_space(pet_path, ct_path, output_path):
-    """PET画像をCT空間にリサンプリング"""
+    """Resample PET image to CT space."""
     from nibabel.processing import resample_from_to
 
     try:
@@ -606,7 +606,7 @@ def resample_pet_to_ct_space(pet_path, ct_path, output_path):
 
 
 def step3_radiomics(nifti_path, seg_folder, anon_id, modality):
-    """PyRadiomicsによる特徴量抽出"""
+    """Feature extraction using PyRadiomics."""
     organs = CONFIG['organs']
     include_diag = CONFIG['output'].get('include_diagnostics', False)
 
@@ -657,7 +657,7 @@ def step3_radiomics(nifti_path, seg_folder, anon_id, modality):
 
 
 def print_version_report():
-    """依存関係のバージョン情報を表示"""
+    """Display version information for dependencies."""
     import platform
     print("=" * 60)
     print("PET-CT Radiomics Pipeline - Version Report")
@@ -710,7 +710,7 @@ def print_version_report():
 
 
 def run_dry_run():
-    """ドライラン（処理なしのプレビュー）"""
+    """Dry run (preview without processing)."""
     print("=" * 60)
     print("PET-CT Radiomics Pipeline - Dry Run")
     print("=" * 60)
@@ -723,10 +723,10 @@ def run_dry_run():
     target_folders = [p.name for p in DICOM_DIR.iterdir() if p.is_dir()]
     print(f"  Found {len(target_folders)} patient folders")
 
-    # 各フォルダのDICOMシリーズをスキャン
+    # Scan DICOM series in each folder
     if PYDICOM_AVAILABLE:
         print(f"\n--- DICOM Series Analysis ---")
-        for folder in target_folders[:3]:  # 最初の3症例のみ
+        for folder in target_folders[:3]:  # First 3 cases only
             patient_path = DICOM_DIR / folder
             series_info = scan_dicom_series(patient_path)
             print(f"\n  {folder}:")
@@ -784,7 +784,7 @@ Examples:
 
     args = parser.parse_args()
 
-    # 特殊モード
+    # Special modes
     if args.version_report:
         print_version_report()
         sys.exit(0)
@@ -793,7 +793,7 @@ Examples:
         run_dry_run()
         sys.exit(0)
 
-    # ディレクトリオーバーライド
+    # Directory override
     if args.input:
         DICOM_DIR = Path(args.input)
     if args.output:
@@ -802,13 +802,13 @@ Examples:
         NIFTI_DIR.mkdir(parents=True, exist_ok=True)
         SEG_DIR.mkdir(parents=True, exist_ok=True)
 
-    # 自動選別の無効化
+    # Disable auto-selection
     if args.no_auto_select:
         CONFIG['dicom_selection']['auto_select'] = False
 
     log_progress("=== Pipeline Started ===", "INFO")
 
-    # GPU確認
+    # GPU check
     gpu_available, gpu_message = check_gpu_memory()
     if gpu_available:
         log_progress(f"GPU Status: {gpu_message}", "INFO")
@@ -838,7 +838,7 @@ Examples:
         ct_seg_dir = None
         ct_nifti = None
 
-        # CT処理
+        # CT processing
         if 'CT' in modality_paths:
             ct_nifti = step1_convert_dicom(modality_paths['CT'], anon_id, 'CT')
             if ct_nifti:
@@ -847,7 +847,7 @@ Examples:
                     feats = step3_radiomics(ct_nifti, ct_seg_dir, anon_id, 'CT')
                     all_results.extend(feats)
 
-        # PET/他モダリティ処理
+        # PET/other modality processing
         for modality, dicom_path in modality_paths.items():
             if modality == 'CT':
                 continue
@@ -857,7 +857,7 @@ Examples:
             if not nifti:
                 continue
 
-            # PET/SPECTはCT空間にリサンプリング
+            # Resample PET/SPECT to CT space
             if modality in ['PET', 'PT', 'SPECT'] and ct_nifti and ct_nifti.exists():
                 resampled_path = NIFTI_DIR / f"{anon_id}_{modality}_registered.nii.gz"
                 if not resampled_path.exists():
@@ -875,7 +875,7 @@ Examples:
             feats = step3_radiomics(nifti, seg_dir, anon_id, modality)
             all_results.extend(feats)
 
-    # 結果保存
+    # Save results
     if all_results:
         if os.path.exists(RESULT_CSV):
             df_exist = pd.read_csv(RESULT_CSV)
@@ -887,7 +887,7 @@ Examples:
         df_final.to_csv(RESULT_CSV, index=False)
         log_progress(f"\n=== Pipeline Completed === Saved {len(df_final)} rows to {RESULT_CSV}", "INFO")
 
-        # 可視化
+        # Visualization
         log_progress("\n=== Step 4: Generating PET-CT Fusion Visualizations ===", "INFO")
         try:
             pet_cases = df_final[df_final['Modality'] == 'PET']['PatientID'].unique()
