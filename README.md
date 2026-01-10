@@ -313,14 +313,15 @@ pet-ct-radiomics-pipeline/
 
 ## Citation
 
-If you use this pipeline in your research, please cite:
+If you use this pipeline in your research, please cite this repository.
+A manuscript describing this work is in preparation.
 
 ```bibtex
 @misc{haga2026petct,
-  title={Automated Multi-Organ PET Radiomics Extraction Using TotalSegmentator-Derived CT Segmentation Masks},
+  title={PET-CT Radiomics Pipeline},
   author={Haga, Akira and Utsunomiya, Daisuke},
   year={2026},
-  note={Manuscript submitted for publication},
+  note={Manuscript in preparation},
   howpublished={\url{https://github.com/haga-aki/pet-ct-radiomics-pipeline}}
 }
 ```
