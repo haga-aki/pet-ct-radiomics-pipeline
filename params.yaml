@@ -33,7 +33,7 @@ setting:
   # No resampling - use native PET resolution
   # For PET, typical voxel size is 4x4x4 mm
   # Resampling disabled to preserve original SUV values
-  resampledPixelSpacing:  # null = no resampling
+  resampledPixelSpacing: null  # null = no resampling
   interpolator: 'sitkBSpline'  # Used only if resampling enabled
   padDistance: 5
 
@@ -56,7 +56,7 @@ setting:
   normalizeScale: 1
 
   # Outlier removal disabled
-  removeOutliers:  # null = disabled
+  removeOutliers: null  # null = disabled
 
   # =========================================================================
   # 2D vs 3D EXTRACTION
@@ -75,7 +75,7 @@ setting:
   symmetricalGLCM: true
 
   # Weighted combination of GLCMs from different angles
-  weightingNorm:  # null = no weighting
+  weightingNorm: null  # null = no weighting
 
   # =========================================================================
   # ROI SETTINGS

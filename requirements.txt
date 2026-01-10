@@ -1,19 +1,24 @@
-# --- 基本ツール ---
-numpy
-pandas
-tqdm
-pyyaml
-scikit-learn
-scipy
+# PET-CT Radiomics Pipeline - Requirements
+# ==========================================
+# Version constraints are critical for compatibility
 
-# --- 画像処理 & DICOM ---
-SimpleITK
-nibabel
-pydicom
-dicom2nifti
-python-gdcm
+# --- Core Libraries ---
+numpy>=1.26,<2.0          # NumPy 2.x incompatible with PyTorch/TotalSegmentator
+pandas>=2.0
+tqdm>=4.65
+pyyaml>=6.0
+scikit-learn>=1.3
+scipy>=1.10
 
-# --- AI & 解析 ---
-monai
-TotalSegmentator
-pyradiomics
+# --- Medical Imaging & DICOM ---
+SimpleITK>=2.3
+nibabel>=5.0
+pydicom>=2.4
+dicom2nifti>=2.4
+python-gdcm>=3.0
+
+# --- AI & Segmentation ---
+TotalSegmentator>=2.0,<3.0   # Version lock for API compatibility
+
+# --- Radiomics ---
+pyradiomics>=3.0,<4.0        # Version lock for feature compatibility

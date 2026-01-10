@@ -66,6 +66,7 @@ class SUVConverter:
             'scale_factor': None,
             'units': getattr(self.ds, 'Units', 'UNKNOWN'),
             'needs_calculation': False,
+            'validated': False,  # True if vendor-specific method confirmed
         }
 
         if self.manufacturer == 'TOSHIBA':
@@ -93,6 +94,7 @@ class SUVConverter:
                     'scale_factor': 100.0,
                     'description': f'Pixel value / 100 = SUVbw ({suv_type})',
                     'needs_calculation': False,
+                    'validated': True,
                 }
             elif 'SUVbw' in suv_type:
                 return {
@@ -100,6 +102,7 @@ class SUVConverter:
                     'scale_factor': 1.0,
                     'description': f'Pixel value = SUVbw ({suv_type})',
                     'needs_calculation': False,
+                    'validated': True,
                 }
 
         # フォールバック: Bq/ml から計算
@@ -116,6 +119,7 @@ class SUVConverter:
                 'scale_factor': float(suv_scale.value),
                 'description': f'Pixel value * {suv_scale.value} = SUV',
                 'needs_calculation': False,
+                'validated': True,
             }
 
         # Activity Concentration Scale Factor
@@ -126,6 +130,7 @@ class SUVConverter:
                 'scale_factor': float(act_scale.value),
                 'description': 'Need to calculate SUV from activity',
                 'needs_calculation': True,
+                'validated': True,
             }
 
         return self._analyze_standard()
@@ -153,6 +158,7 @@ class SUVConverter:
                 'scale_factor': None,
                 'description': 'Calculate SUVbw from Bq/ml using decay correction',
                 'needs_calculation': True,
+                'validated': True,
                 'patient_weight': patient_weight,
                 'radiopharmaceutical': rp_info,
             }
@@ -162,6 +168,7 @@ class SUVConverter:
                 'scale_factor': None,
                 'description': 'Cannot determine SUV calculation method',
                 'needs_calculation': True,
+                'validated': False,
             }
 
     def get_suv_scale_factor(self):
@@ -265,6 +272,7 @@ class SUVConverter:
         print(f"Units in DICOM: {self.suv_info['units']}")
         print(f"Method: {self.suv_info['method']}")
         print(f"Description: {self.suv_info['description']}")
+        print(f"Validated: {self.suv_info.get('validated', False)}")
 
         scale = self.get_suv_scale_factor()
         if scale:

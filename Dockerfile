@@ -38,25 +38,26 @@ FROM base AS dependencies
 COPY requirements.txt .
 
 # Install Python packages (numpy first for pyradiomics build)
+# IMPORTANT: Version constraints are critical for compatibility
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir numpy==1.26.4 && \
+    pip install --no-cache-dir numpy>=1.26,<2.0 && \
     pip install --no-cache-dir \
-    pandas \
-    tqdm \
-    pyyaml \
-    scikit-learn \
-    scipy \
-    SimpleITK \
-    nibabel \
-    pydicom \
-    dicom2nifti \
-    matplotlib \
-    seaborn \
-    TotalSegmentator>=2.0
+    pandas>=2.0 \
+    tqdm>=4.65 \
+    pyyaml>=6.0 \
+    scikit-learn>=1.3 \
+    scipy>=1.10 \
+    SimpleITK>=2.3 \
+    nibabel>=5.0 \
+    pydicom>=2.4 \
+    dicom2nifti>=2.4 \
+    matplotlib>=3.7 \
+    seaborn>=0.12 \
+    "TotalSegmentator>=2.0,<3.0"
 
 # Install pyradiomics with build dependencies
 RUN pip install --no-cache-dir setuptools wheel cython versioneer six pykwalify && \
-    pip install --no-cache-dir --no-build-isolation pyradiomics>=3.0
+    pip install --no-cache-dir --no-build-isolation "pyradiomics>=3.0,<4.0"
 
 # =========================================
 # Stage 3: Final image

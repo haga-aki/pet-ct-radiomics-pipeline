@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from radiomics import featureextractor
+import yaml
 
 from suv_converter import SUVConverter
 
@@ -20,23 +21,35 @@ DICOM_DIR = BASE_DIR / "raw_download"
 NIFTI_DIR = BASE_DIR / "nifti_images"
 SEG_DIR = BASE_DIR / "segmentations"
 
-# Target organs (representative 8-organ set)
-# Covers different sizes, physiologic uptake patterns, and PV susceptibility
-ORGANS = [
-    # Large, stable organs
-    "liver",
-    "spleen",
-    # Medium organs with physiologic uptake
-    "kidney_left",
-    "kidney_right",
-    # Small organs (partial volume susceptible)
-    "adrenal_gland_left",
-    "adrenal_gland_right",
-    # Blood pool reference
-    "aorta",
-    # Bone marrow representative
-    "vertebrae_L1",
-]
+
+def load_config(config_path=None):
+    """Load configuration from config.yaml"""
+    if config_path is None:
+        config_path = BASE_DIR / "config.yaml"
+
+    # Default organs (representative 8-organ set)
+    default_organs = [
+        "liver",
+        "spleen",
+        "kidney_left",
+        "kidney_right",
+        "adrenal_gland_left",
+        "adrenal_gland_right",
+        "aorta",
+        "vertebrae_L1",
+    ]
+
+    if Path(config_path).exists():
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+            if config and 'organs' in config:
+                return config['organs']
+
+    return default_organs
+
+
+# Load organs from config
+ORGANS = load_config()
 
 
 def get_patient_ids():
@@ -79,6 +92,14 @@ def process_patient(patient_id, extractor):
     suv_output_path = NIFTI_DIR / f"{patient_id}_PET_SUV.nii.gz"
     ct_path = NIFTI_DIR / f"{patient_id}_CT.nii.gz"
     seg_dir = SEG_DIR / patient_id
+
+    # セグメンテーションディレクトリがない場合は_CT付きを試す
+    if not seg_dir.exists():
+        seg_dir = SEG_DIR / f"{patient_id}_CT"
+
+    if not seg_dir.exists():
+        print(f"  Segmentation directory not found for {patient_id}")
+        return results
 
     # PET画像があるか確認
     if not pet_reg_path.exists():
@@ -171,6 +192,7 @@ def main():
     print("=" * 70)
     print("PET/CT Radiomics - SUV Conversion and Feature Extraction")
     print("=" * 70)
+    print(f"Target organs ({len(ORGANS)}): {ORGANS}")
 
     # Get patient list
     patient_ids = get_patient_ids()
