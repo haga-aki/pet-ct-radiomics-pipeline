@@ -9,14 +9,14 @@ SimpleITK>=2.3
 
 # Machine learning / Segmentation
 TotalSegmentator>=2.0
-torch>=2.0
+torch>=2.2
 torchvision
 
 # Radiomics
 pyradiomics>=3.0
 
 # Data processing
-numpy>=1.26
+numpy>=1.26,<2.0
 pandas>=2.0
 scipy>=1.10
 scikit-image>=0.21

@@ -6,7 +6,7 @@ DICOM to NIfTI conversion -> TotalSegmentator segmentation -> PyRadiomics featur
 
 Improvements (v2.0):
 - Automatic DICOM series selection (auto-detect main CT and PET volumes)
-- Dependency version pinning (PyTorch 2.4+, NumPy 1.x)
+- Dependency version pinning (PyTorch 2.2+, NumPy 1.x)
 - Enhanced input validation
 """
 
