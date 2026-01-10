@@ -324,96 +324,74 @@ def select_best_series(series_info, config):
     selected = {}
 
     # CTシリーズの選別
+    # 優先順位: グレースケール + unusableでない + スライス数最大
+    # PRIMARYよりスライス数を優先（PET-CTではDERIVED CTが本体であることが多い）
     ct_series = [s for s in series_info if s['modality'] == 'CT']
     if ct_series:
         # Step 1: グレースケール画像のみフィルタリング（RGB/RGBA除外）
         grayscale_ct = [s for s in ct_series if is_valid_grayscale_image(s)]
         if not grayscale_ct:
-            log_progress("  Warning: No grayscale CT found, using all CT series", "WARNING")
-            grayscale_ct = ct_series
+            log_progress("  Warning: No grayscale CT found", "WARNING")
+        else:
+            # Step 2: unusableシリーズを除外（FUSION/MIP/SCOUT/REPORT等）
+            # DERIVED/SECONDARYは許可（PET-CTでは減弱補正CTがDERIVEDとしてマークされる）
+            usable_ct = [s for s in grayscale_ct if not _is_unusable_series(s)]
 
-        # Step 2: 派生・二次画像を除外（ただしDERIVED CTは許可、MIP/FUSION/SCOUTは除外）
-        # PET-CT一体型では減弱補正用CTがDERIVEDとしてマークされることが多い
-        primary_ct = [s for s in grayscale_ct if not is_derived_or_secondary(s)]
-
-        # プライマリがなければ、DERIVED CTも許可（ただしFUSION/MIP/SCOUT以外）
-        if not primary_ct:
-            # SeriesDescriptionに問題のあるキーワードがないDERIVED CTを許可
-            derived_ct_candidates = [s for s in grayscale_ct
-                                    if not _is_unusable_series(s)]
-            if derived_ct_candidates:
-                log_progress("  Info: No primary CT found, using DERIVED CT (non-fusion/MIP)", "INFO")
-                primary_ct = derived_ct_candidates
+            if not usable_ct:
+                log_progress("  Warning: No usable CT found (all are FUSION/MIP/SCOUT/REPORT)", "WARNING")
             else:
-                log_progress("  Warning: No usable CT found, falling back to all grayscale CT", "WARNING")
-                primary_ct = grayscale_ct
+                # Step 3: スライス数でフィルタリング
+                valid_ct = [s for s in usable_ct if s['num_slices'] >= min_ct_slices]
 
-        # Step 3: スライス数でフィルタリング（レポートやDose Report除外）
-        valid_ct = [s for s in primary_ct if s['num_slices'] >= min_ct_slices]
+                if valid_ct:
+                    # 512x512の標準CTを優先、その中でスライス数最大を選択
+                    standard_ct = [s for s in valid_ct if s['image_size'] == (512, 512)]
+                    candidates = standard_ct if standard_ct else valid_ct
 
-        if valid_ct:
-            # 512x512の標準CTを優先
-            standard_ct = [s for s in valid_ct if s['image_size'] == (512, 512)]
-            if standard_ct:
-                # "CT AXIAL"を含むものを最優先、なければスライス数最大
-                axial_ct = [s for s in standard_ct
-                           if 'ct axial' in s['series_description'].lower()
-                           or 'axial' in s['series_description'].lower()]
-                if axial_ct:
-                    best_ct = max(axial_ct, key=lambda x: x['num_slices'])
-                else:
-                    best_ct = max(standard_ct, key=lambda x: x['num_slices'])
-            else:
-                best_ct = max(valid_ct, key=lambda x: x['num_slices'])
+                    # スライス数最大のCTを選択（PRIMARY/DERIVEDは問わない）
+                    best_ct = max(candidates, key=lambda x: x['num_slices'])
 
-            selected['CT'] = best_ct['path']
-            log_progress(f"  Selected CT: {best_ct['folder_name']} "
-                        f"({best_ct['num_slices']} slices, {best_ct['image_size']}, "
-                        f"Photometric={best_ct.get('photometric_interpretation', 'N/A')}, "
-                        f"'{best_ct['series_description']}')", "INFO")
+                    selected['CT'] = best_ct['path']
+                    img_type = best_ct.get('image_type', [])
+                    type_str = '/'.join(img_type[:2]) if img_type else 'N/A'
+                    log_progress(f"  Selected CT: {best_ct['folder_name']} "
+                                f"({best_ct['num_slices']} slices, {best_ct['image_size']}, "
+                                f"Type={type_str}, "
+                                f"'{best_ct['series_description']}')", "INFO")
 
     # PETシリーズの選別
+    # MIPは絶対に使用しない（MIPしかない場合はエラー）
     pet_series = [s for s in series_info if s['modality'] in ['PT', 'PET']]
     if pet_series:
         # Step 1: グレースケール画像のみフィルタリング
         grayscale_pet = [s for s in pet_series if is_valid_grayscale_image(s)]
         if not grayscale_pet:
-            log_progress("  Warning: No grayscale PET found, using all PET series", "WARNING")
-            grayscale_pet = pet_series
+            log_progress("  Warning: No grayscale PET found", "WARNING")
+        else:
+            # Step 2: unusableシリーズを除外（MIP/REPORT等）
+            # MIPへのフォールバックは禁止
+            usable_pet = [s for s in grayscale_pet if not _is_unusable_series(s)]
 
-        # Step 2: 派生・二次画像を除外
-        primary_pet = [s for s in grayscale_pet if not is_derived_or_secondary(s)]
-
-        # プライマリがなければ、DERIVED PETも許可（ただしMIP以外）
-        if not primary_pet:
-            derived_pet_candidates = [s for s in grayscale_pet
-                                     if not _is_unusable_series(s)]
-            if derived_pet_candidates:
-                log_progress("  Info: No primary PET found, using DERIVED PET (non-MIP)", "INFO")
-                primary_pet = derived_pet_candidates
+            if not usable_pet:
+                # MIPしかない場合はエラー（フォールバックしない）
+                log_progress("  ERROR: No usable PET found (only MIP/REPORT available). "
+                            "Volumetric PET data is required for radiomics.", "ERROR")
+                # PETは選択しない（CTのみで処理続行、または呼び出し元でエラー処理）
             else:
-                log_progress("  Warning: No usable PET found, falling back to all grayscale PET", "WARNING")
-                primary_pet = grayscale_pet
+                # Step 3: スライス数でフィルタリング
+                valid_pet = [s for s in usable_pet if s['num_slices'] >= min_pet_slices]
 
-        # Step 3: スライス数でフィルタリング
-        valid_pet = [s for s in primary_pet if s['num_slices'] >= min_pet_slices]
+                if valid_pet:
+                    # スライス数最大のPETを選択
+                    best_pet = max(valid_pet, key=lambda x: x['num_slices'])
 
-        if valid_pet:
-            # "Axial"を含むシリーズを優先
-            axial_pet = [s for s in valid_pet
-                        if 'axial' in s['series_description'].lower()
-                        or 'body' in s['series_description'].lower()]
-
-            if axial_pet:
-                best_pet = max(axial_pet, key=lambda x: x['num_slices'])
-            else:
-                best_pet = max(valid_pet, key=lambda x: x['num_slices'])
-
-            selected['PET'] = best_pet['path']
-            log_progress(f"  Selected PET: {best_pet['folder_name']} "
-                        f"({best_pet['num_slices']} slices, {best_pet['image_size']}, "
-                        f"Photometric={best_pet.get('photometric_interpretation', 'N/A')}, "
-                        f"'{best_pet['series_description']}')", "INFO")
+                    selected['PET'] = best_pet['path']
+                    img_type = best_pet.get('image_type', [])
+                    type_str = '/'.join(img_type[:2]) if img_type else 'N/A'
+                    log_progress(f"  Selected PET: {best_pet['folder_name']} "
+                                f"({best_pet['num_slices']} slices, {best_pet['image_size']}, "
+                                f"Type={type_str}, "
+                                f"'{best_pet['series_description']}')", "INFO")
 
     return selected if selected else None
 
