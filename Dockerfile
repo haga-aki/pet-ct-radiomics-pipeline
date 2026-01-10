@@ -77,7 +77,6 @@ COPY CHANGELOG.md .
 
 # Copy documentation (optional, for reference)
 COPY docs/ ./docs/
-COPY examples/ ./examples/
 
 # Create necessary directories
 RUN mkdir -p /data/input /data/output /app/nifti_images /app/segmentations
