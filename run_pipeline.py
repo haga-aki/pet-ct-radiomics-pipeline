@@ -190,13 +190,28 @@ def scan_dicom_series(patient_path):
             rows = getattr(dcm, 'Rows', 0)
             cols = getattr(dcm, 'Columns', 0)
 
+            # 画像品質チェック用の追加メタデータ
+            photometric = getattr(dcm, 'PhotometricInterpretation', '')
+            samples_per_pixel = getattr(dcm, 'SamplesPerPixel', 1)
+            image_type_raw = getattr(dcm, 'ImageType', [])
+            # pydicom.multival.MultiValue や通常のリストを処理
+            if hasattr(image_type_raw, '__iter__') and not isinstance(image_type_raw, str):
+                image_type = [str(t) for t in image_type_raw]
+            elif image_type_raw:
+                image_type = [str(image_type_raw)]
+            else:
+                image_type = []
+
             series_info.append({
                 'path': subdir,
                 'modality': modality,
                 'series_description': series_desc,
                 'num_slices': len(dcm_files),
                 'image_size': (rows, cols),
-                'folder_name': subdir.name
+                'folder_name': subdir.name,
+                'photometric_interpretation': photometric,
+                'samples_per_pixel': samples_per_pixel,
+                'image_type': image_type
             })
         except Exception as e:
             log_progress(f"  Warning: Could not read DICOM in {subdir.name}: {e}", "WARNING")
@@ -204,13 +219,100 @@ def scan_dicom_series(patient_path):
     return series_info
 
 
+def is_valid_grayscale_image(series):
+    """
+    グレースケール画像かどうかを判定
+
+    有効な条件:
+    - PhotometricInterpretation: MONOCHROME1 または MONOCHROME2
+    - SamplesPerPixel: 1
+
+    除外すべき画像:
+    - RGB/RGBA画像 (SamplesPerPixel=3 or 4)
+    - カラー画像 (PhotometricInterpretation: RGB, YBR_*, PALETTE COLOR)
+    """
+    photometric = series.get('photometric_interpretation', '')
+    samples = series.get('samples_per_pixel', 1)
+
+    # グレースケール画像のみ許可
+    valid_photometric = photometric in ['MONOCHROME1', 'MONOCHROME2', '']
+    valid_samples = samples == 1
+
+    return valid_photometric and valid_samples
+
+
+def is_derived_or_secondary(series):
+    """
+    派生画像・二次画像かどうかを判定
+
+    除外すべきImageType:
+    - DERIVED: 加工済み画像
+    - SECONDARY: 二次画像（スクリーンキャプチャ等）
+
+    除外すべきSeriesDescription:
+    - MIP: Maximum Intensity Projection
+    - FUSION: 融合画像
+    - SCOUT: スカウト画像
+    - LOCALIZER: ローカライザー
+    - REPORT: レポート画像
+    """
+    image_type = series.get('image_type', [])
+    series_desc = series.get('series_description', '').lower()
+
+    # ImageTypeチェック
+    excluded_image_types = ['DERIVED', 'SECONDARY']
+    for img_type in image_type:
+        if isinstance(img_type, str) and img_type.upper() in excluded_image_types:
+            return True
+
+    # SeriesDescriptionチェック
+    excluded_keywords = ['mip', 'fusion', 'scout', 'localizer', 'report',
+                         'screen', 'capture', 'presentation', 'dose']
+    for keyword in excluded_keywords:
+        if keyword in series_desc:
+            return True
+
+    return False
+
+
+def _is_unusable_series(series):
+    """
+    使用不可なシリーズかどうかを判定（SeriesDescriptionベース）
+
+    DERIVED/SECONDARYであっても以下でなければ使用可能:
+    - FUSION: 融合画像（RGB/カラー）
+    - MIP: Maximum Intensity Projection
+    - SCOUT/LOCALIZER: 位置決め画像
+    - REPORT: レポート画像
+    - SCREEN SAVE: スクリーンキャプチャ
+    """
+    series_desc = series.get('series_description', '').lower()
+    image_type = series.get('image_type', [])
+
+    # 使用不可キーワード
+    unusable_keywords = ['fusion', 'mip', 'scout', 'localizer', 'report',
+                         'screen', 'capture', 'dose', 'presentation']
+    for keyword in unusable_keywords:
+        if keyword in series_desc:
+            return True
+
+    # ImageTypeにSCREEN SAVEが含まれる場合
+    for img_type in image_type:
+        if isinstance(img_type, str) and 'SCREEN' in img_type.upper():
+            return True
+
+    return False
+
+
 def select_best_series(series_info, config):
     """
     CT/PETの本体シリーズを自動選別
 
     選別基準:
-    - CT: スライス数が最大で、かつ画像サイズが512x512のシリーズ
-    - PET: スライス数が最大で、かつ"Axial"を含むか画像サイズが妥当なシリーズ
+    1. グレースケール画像のみ (MONOCHROME1/2, SamplesPerPixel=1)
+    2. 派生・二次画像を除外 (DERIVED, SECONDARY, MIP, FUSION等)
+    3. CT: スライス数が最大で、かつ画像サイズが512x512のシリーズ
+    4. PET: スライス数が最大で、かつ"Axial"を含むか画像サイズが妥当なシリーズ
 
     Returns:
         dict: {'CT': path, 'PET': path} またはNone
@@ -224,19 +326,34 @@ def select_best_series(series_info, config):
     # CTシリーズの選別
     ct_series = [s for s in series_info if s['modality'] == 'CT']
     if ct_series:
-        # スライス数でフィルタリング（レポートやDose Report除外）
-        valid_ct = [s for s in ct_series if s['num_slices'] >= min_ct_slices]
+        # Step 1: グレースケール画像のみフィルタリング（RGB/RGBA除外）
+        grayscale_ct = [s for s in ct_series if is_valid_grayscale_image(s)]
+        if not grayscale_ct:
+            log_progress("  Warning: No grayscale CT found, using all CT series", "WARNING")
+            grayscale_ct = ct_series
+
+        # Step 2: 派生・二次画像を除外（ただしDERIVED CTは許可、MIP/FUSION/SCOUTは除外）
+        # PET-CT一体型では減弱補正用CTがDERIVEDとしてマークされることが多い
+        primary_ct = [s for s in grayscale_ct if not is_derived_or_secondary(s)]
+
+        # プライマリがなければ、DERIVED CTも許可（ただしFUSION/MIP/SCOUT以外）
+        if not primary_ct:
+            # SeriesDescriptionに問題のあるキーワードがないDERIVED CTを許可
+            derived_ct_candidates = [s for s in grayscale_ct
+                                    if not _is_unusable_series(s)]
+            if derived_ct_candidates:
+                log_progress("  Info: No primary CT found, using DERIVED CT (non-fusion/MIP)", "INFO")
+                primary_ct = derived_ct_candidates
+            else:
+                log_progress("  Warning: No usable CT found, falling back to all grayscale CT", "WARNING")
+                primary_ct = grayscale_ct
+
+        # Step 3: スライス数でフィルタリング（レポートやDose Report除外）
+        valid_ct = [s for s in primary_ct if s['num_slices'] >= min_ct_slices]
 
         if valid_ct:
-            # FUSIONシリーズを除外（純粋なCTを優先）
-            non_fusion_ct = [s for s in valid_ct
-                            if 'fusion' not in s['series_description'].lower()]
-
-            # 非FUSIONシリーズがあればそちらを使用
-            candidates = non_fusion_ct if non_fusion_ct else valid_ct
-
             # 512x512の標準CTを優先
-            standard_ct = [s for s in candidates if s['image_size'] == (512, 512)]
+            standard_ct = [s for s in valid_ct if s['image_size'] == (512, 512)]
             if standard_ct:
                 # "CT AXIAL"を含むものを最優先、なければスライス数最大
                 axial_ct = [s for s in standard_ct
@@ -247,18 +364,39 @@ def select_best_series(series_info, config):
                 else:
                     best_ct = max(standard_ct, key=lambda x: x['num_slices'])
             else:
-                best_ct = max(candidates, key=lambda x: x['num_slices'])
+                best_ct = max(valid_ct, key=lambda x: x['num_slices'])
 
             selected['CT'] = best_ct['path']
             log_progress(f"  Selected CT: {best_ct['folder_name']} "
                         f"({best_ct['num_slices']} slices, {best_ct['image_size']}, "
+                        f"Photometric={best_ct.get('photometric_interpretation', 'N/A')}, "
                         f"'{best_ct['series_description']}')", "INFO")
 
     # PETシリーズの選別
     pet_series = [s for s in series_info if s['modality'] in ['PT', 'PET']]
     if pet_series:
-        # スライス数でフィルタリング
-        valid_pet = [s for s in pet_series if s['num_slices'] >= min_pet_slices]
+        # Step 1: グレースケール画像のみフィルタリング
+        grayscale_pet = [s for s in pet_series if is_valid_grayscale_image(s)]
+        if not grayscale_pet:
+            log_progress("  Warning: No grayscale PET found, using all PET series", "WARNING")
+            grayscale_pet = pet_series
+
+        # Step 2: 派生・二次画像を除外
+        primary_pet = [s for s in grayscale_pet if not is_derived_or_secondary(s)]
+
+        # プライマリがなければ、DERIVED PETも許可（ただしMIP以外）
+        if not primary_pet:
+            derived_pet_candidates = [s for s in grayscale_pet
+                                     if not _is_unusable_series(s)]
+            if derived_pet_candidates:
+                log_progress("  Info: No primary PET found, using DERIVED PET (non-MIP)", "INFO")
+                primary_pet = derived_pet_candidates
+            else:
+                log_progress("  Warning: No usable PET found, falling back to all grayscale PET", "WARNING")
+                primary_pet = grayscale_pet
+
+        # Step 3: スライス数でフィルタリング
+        valid_pet = [s for s in primary_pet if s['num_slices'] >= min_pet_slices]
 
         if valid_pet:
             # "Axial"を含むシリーズを優先
@@ -274,6 +412,7 @@ def select_best_series(series_info, config):
             selected['PET'] = best_pet['path']
             log_progress(f"  Selected PET: {best_pet['folder_name']} "
                         f"({best_pet['num_slices']} slices, {best_pet['image_size']}, "
+                        f"Photometric={best_pet.get('photometric_interpretation', 'N/A')}, "
                         f"'{best_pet['series_description']}')", "INFO")
 
     return selected if selected else None
@@ -305,8 +444,14 @@ def detect_folder_structure(patient_path, config):
         if series_info:
             log_progress(f"  Found {len(series_info)} series:", "INFO")
             for s in series_info:
+                photometric = s.get('photometric_interpretation', 'N/A')
+                samples = s.get('samples_per_pixel', 1)
+                img_type = s.get('image_type', [])
+                img_type_str = '/'.join(img_type[:2]) if img_type else 'N/A'
                 log_progress(f"    - {s['folder_name']}: {s['modality']}, "
                             f"{s['num_slices']} slices, {s['image_size']}, "
+                            f"Photometric={photometric}, Samples={samples}, "
+                            f"Type={img_type_str}, "
                             f"'{s['series_description']}'", "INFO")
 
             selected = select_best_series(series_info, config)
@@ -570,8 +715,13 @@ def run_dry_run():
             series_info = scan_dicom_series(patient_path)
             print(f"\n  {folder}:")
             for s in series_info:
-                print(f"    - {s['folder_name']}: {s['modality']}, "
-                      f"{s['num_slices']} slices, '{s['series_description']}'")
+                photometric = s.get('photometric_interpretation', 'N/A')
+                samples = s.get('samples_per_pixel', 1)
+                valid = is_valid_grayscale_image(s) and not is_derived_or_secondary(s)
+                status = "✓" if valid else "✗"
+                print(f"    {status} {s['folder_name']}: {s['modality']}, "
+                      f"{s['num_slices']} slices, Photometric={photometric}, "
+                      f"Samples={samples}, '{s['series_description']}'")
 
     print(f"\nOutput Configuration:")
     print(f"  NIfTI Directory: {NIFTI_DIR}")
