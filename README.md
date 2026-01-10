@@ -88,7 +88,7 @@ DICOM Input (PET + CT)
 
 **Important:** Specific versions are required to avoid compatibility issues:
 
-- **PyTorch >= 2.4** (required for TotalSegmentator torch._dynamo compatibility)
+- **PyTorch >= 2.2** (required for TotalSegmentator compatibility)
 - **NumPy >= 1.26, < 2.0** (NumPy 2.x incompatible with PyTorch/TotalSegmentator)
 - TotalSegmentator >= 2.0, < 3.0
 - PyRadiomics >= 3.0, < 4.0

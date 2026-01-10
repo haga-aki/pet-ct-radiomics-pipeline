@@ -5,7 +5,7 @@
 #   conda env create -f environment.yml
 #   conda activate med_ai
 #
-# Note: PyTorch 2.2.x and TotalSegmentator 2.11.0 compatibility issues resolved
+# Note: PyTorch 2.2+ and TotalSegmentator 2.x compatibility verified
 #       NumPy 2.x and PyRadiomics conflict resolved
 
 name: med_ai
@@ -22,8 +22,8 @@ dependencies:
   # NumPy: Use 1.x series (NumPy 2.x is incompatible with PyTorch/TotalSegmentator)
   - numpy>=1.26,<2.0
 
-  # PyTorch: 2.4+ recommended (for torch._dynamo compatibility)
-  - pytorch>=2.4
+  # PyTorch: 2.2+ required for TotalSegmentator compatibility
+  - pytorch>=2.2
   - torchvision
 
   # Core libraries

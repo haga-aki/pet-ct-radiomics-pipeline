@@ -22,8 +22,8 @@ dependencies:
   # NumPy: Use 1.x series (NumPy 2.x is incompatible with PyTorch/TotalSegmentator)
   - numpy>=1.26,<2.0
 
-  # PyTorch with CUDA: 2.4+ recommended (for torch._dynamo compatibility)
-  - pytorch>=2.4
+  # PyTorch with CUDA: 2.2+ required for TotalSegmentator compatibility
+  - pytorch>=2.2
   - torchvision
   - torchaudio
   - pytorch-cuda=12.1  # Replace with cpuonly if no GPU
