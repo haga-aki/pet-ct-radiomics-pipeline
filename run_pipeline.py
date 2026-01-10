@@ -243,18 +243,20 @@ def is_valid_grayscale_image(series):
 
 def is_derived_or_secondary(series):
     """
-    派生画像・二次画像かどうかを判定
+    派生画像・二次画像かどうかを判定（厳格モード）
 
-    除外すべきImageType:
-    - DERIVED: 加工済み画像
-    - SECONDARY: 二次画像（スクリーンキャプチャ等）
+    この関数は「PRIMARY/ORIGINAL画像のみ」を選択する最初のフィルタとして使用。
+    TrueならDERIVED/SECONDARYとして除外候補となるが、
+    select_best_series()でフォールバックにより再検討される。
 
-    除外すべきSeriesDescription:
-    - MIP: Maximum Intensity Projection
-    - FUSION: 融合画像
-    - SCOUT: スカウト画像
-    - LOCALIZER: ローカライザー
-    - REPORT: レポート画像
+    判定基準:
+    1. ImageTypeに DERIVED または SECONDARY が含まれる
+    2. SeriesDescriptionに問題キーワードが含まれる
+
+    Note:
+    - PET-CTでは減弱補正CTがDERIVEDとしてマークされることが多い
+    - この関数でTrueでも、_is_unusable_series()でFalseなら使用可能
+    - 最終的な選択は select_best_series() のフォールバックロジックで決定
     """
     image_type = series.get('image_type', [])
     series_desc = series.get('series_description', '').lower()
@@ -265,7 +267,7 @@ def is_derived_or_secondary(series):
         if isinstance(img_type, str) and img_type.upper() in excluded_image_types:
             return True
 
-    # SeriesDescriptionチェック
+    # SeriesDescriptionチェック（参考情報として）
     excluded_keywords = ['mip', 'fusion', 'scout', 'localizer', 'report',
                          'screen', 'capture', 'presentation', 'dose']
     for keyword in excluded_keywords:
@@ -277,35 +279,47 @@ def is_derived_or_secondary(series):
 
 def _is_unusable_series(series):
     """
-    使用不可なシリーズかどうかを判定（SeriesDescriptionベース）
+    本当に使用不可なシリーズかどうかを判定（最終フィルタ）
 
-    DERIVED/SECONDARYであっても以下でなければ使用可能:
-    - FUSION: 融合画像（RGB/カラー）
-    - MIP: Maximum Intensity Projection（ただしスライス数が多い場合はボリュームとして許可）
+    is_derived_or_secondary()でDERIVED/SECONDARYと判定されたシリーズに対して、
+    実際に使用不可かどうかを再判定する。
+
+    使用不可（常にTrue）:
+    - FUSION: 融合画像（通常RGB/カラー）
     - SCOUT/LOCALIZER: 位置決め画像
-    - REPORT: レポート画像
+    - REPORT/DOSE: レポート・線量情報
     - SCREEN SAVE: スクリーンキャプチャ
 
-    Note: "MIP"という名前でもスライス数が多い場合（>=50）はボリュームデータの可能性が高い
-    （真のMIPは通常1〜数スライス）
+    条件付き使用可能:
+    - MIP: スライス数 >= 50 なら許可（警告付き）
+      理由: 一部のPET-CTスキャナーはボリュームPETに"MIP"という名前を付ける
+      真のMIPは通常1〜数スライスのみ
+
+    使用可能（False）:
+    - 上記以外のDERIVED/SECONDARY
+    - PET-CTの減弱補正CT（DERIVED）など
+
+    Returns:
+        bool: True=使用不可、False=使用可能
     """
     series_desc = series.get('series_description', '').lower()
     image_type = series.get('image_type', [])
     num_slices = series.get('num_slices', 0)
 
-    # 常に除外するキーワード
+    # 常に除外するキーワード（放射線特徴量抽出に不適切）
     always_unusable = ['fusion', 'scout', 'localizer', 'report',
                        'screen', 'capture', 'dose', 'presentation']
     for keyword in always_unusable:
         if keyword in series_desc:
             return True
 
-    # MIPはスライス数で判定（多スライスならボリュームデータとして許可）
-    # 真のMIPは通常1〜数スライス、50以上あればボリュームの可能性が高い
+    # MIPはスライス数で判定
+    # - スライス数 < 50: 真のMIP（投影画像）→ 除外
+    # - スライス数 >= 50: ボリュームデータの可能性が高い → 許可（警告付き）
+    # この閾値は経験的なもので、設定で変更可能にすることを検討
     if 'mip' in series_desc:
         if num_slices < 50:
-            return True  # 少スライスのMIPは除外
-        # 多スライスの"MIP"名称はボリュームとして許可（警告のみ）
+            return True  # 真のMIPは除外
 
     # ImageTypeにSCREEN SAVEが含まれる場合
     for img_type in image_type:
@@ -319,11 +333,19 @@ def select_best_series(series_info, config):
     """
     CT/PETの本体シリーズを自動選別
 
-    選別基準:
+    選別ロジック:
     1. グレースケール画像のみ (MONOCHROME1/2, SamplesPerPixel=1)
-    2. 派生・二次画像を除外 (DERIVED, SECONDARY, MIP, FUSION等)
-    3. CT: スライス数が最大で、かつ画像サイズが512x512のシリーズ
-    4. PET: スライス数が最大で、かつ"Axial"を含むか画像サイズが妥当なシリーズ
+       - RGB/RGBA画像（FUSION等）は除外
+    2. 使用不可シリーズを除外 (_is_unusable_series)
+       - FUSION/SCOUT/LOCALIZER/REPORT/DOSE/SCREEN SAVE
+       - MIPは条件付き: スライス数 < 50 なら除外、>= 50 なら許可
+    3. スライス数でフィルタリング（min_ct_slices, min_pet_slices）
+    4. CT: 512x512を優先、その中でスライス数最大
+    5. PET: スライス数最大
+
+    Note:
+    - DERIVED/SECONDARYは除外しない（PET-CTでは本体がDERIVEDのことが多い）
+    - MIP名称でも多スライスならボリュームとして許可（警告付き）
 
     Returns:
         dict: {'CT': path, 'PET': path} またはNone
