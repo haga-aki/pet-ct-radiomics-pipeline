@@ -281,20 +281,31 @@ def _is_unusable_series(series):
 
     DERIVED/SECONDARYであっても以下でなければ使用可能:
     - FUSION: 融合画像（RGB/カラー）
-    - MIP: Maximum Intensity Projection
+    - MIP: Maximum Intensity Projection（ただしスライス数が多い場合はボリュームとして許可）
     - SCOUT/LOCALIZER: 位置決め画像
     - REPORT: レポート画像
     - SCREEN SAVE: スクリーンキャプチャ
+
+    Note: "MIP"という名前でもスライス数が多い場合（>=50）はボリュームデータの可能性が高い
+    （真のMIPは通常1〜数スライス）
     """
     series_desc = series.get('series_description', '').lower()
     image_type = series.get('image_type', [])
+    num_slices = series.get('num_slices', 0)
 
-    # 使用不可キーワード
-    unusable_keywords = ['fusion', 'mip', 'scout', 'localizer', 'report',
-                         'screen', 'capture', 'dose', 'presentation']
-    for keyword in unusable_keywords:
+    # 常に除外するキーワード
+    always_unusable = ['fusion', 'scout', 'localizer', 'report',
+                       'screen', 'capture', 'dose', 'presentation']
+    for keyword in always_unusable:
         if keyword in series_desc:
             return True
+
+    # MIPはスライス数で判定（多スライスならボリュームデータとして許可）
+    # 真のMIPは通常1〜数スライス、50以上あればボリュームの可能性が高い
+    if 'mip' in series_desc:
+        if num_slices < 50:
+            return True  # 少スライスのMIPは除外
+        # 多スライスの"MIP"名称はボリュームとして許可（警告のみ）
 
     # ImageTypeにSCREEN SAVEが含まれる場合
     for img_type in image_type:
@@ -384,6 +395,11 @@ def select_best_series(series_info, config):
                 if valid_pet:
                     # スライス数最大のPETを選択
                     best_pet = max(valid_pet, key=lambda x: x['num_slices'])
+
+                    # MIP名称だが多スライスの場合は警告
+                    if 'mip' in best_pet['series_description'].lower():
+                        log_progress(f"  Warning: PET series has 'MIP' in name but {best_pet['num_slices']} slices. "
+                                    "Treating as volumetric data.", "WARNING")
 
                     selected['PET'] = best_pet['path']
                     img_type = best_pet.get('image_type', [])
