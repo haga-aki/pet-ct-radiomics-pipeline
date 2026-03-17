@@ -171,6 +171,8 @@ This repository is intended for code and documentation only.
 
 - Raw DICOM data should remain outside version control.
 - Anonymized ID mapping files are ignored by `.gitignore`.
+- De-identified example data are not distributed in this repository and may be
+  requested from the corresponding author.
 - If you publish derived CSV files, ensure they do not contain patient-linked
   identifiers or institution-restricted data.
 

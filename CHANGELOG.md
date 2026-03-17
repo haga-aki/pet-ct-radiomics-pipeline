@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2026-03-17
+
+### Changed
+- Aligned the public pipeline with the JJR manuscript workflow:
+  - PET is resampled to CT space before SUV conversion and PET radiomics extraction
+  - `params.yaml` is applied during PET radiomics extraction
+  - CT radiomics export is disabled by default
+- Updated README and supporting documentation to match the released workflow and
+  clarify that no additional PyRadiomics resampling is performed after PET-to-CT
+  resampling.
+
+### Fixed
+- Removed broken references to non-existent visualization scripts from the
+  public analysis entry points.
+- Removed tracked derived CSV examples that were not appropriate for public
+  distribution.
+- Updated release metadata to match the manuscript-aligned public version.
+
 ## [2.0.0] - 2026-01-09
 
 ### Added
