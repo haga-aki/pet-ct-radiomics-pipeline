@@ -193,7 +193,7 @@ run_analysis.bat
 4. **Segmentation**: TotalSegmentator processes CT images (104 structures)
 5. **Spatial Alignment**: PET resampled to CT space via nibabel affine (NOT de novo registration)
 6. **SUV Conversion**: Vendor-neutral SUV calculation
-7. **Feature Extraction**: 107 IBSI-compliant radiomics features
+7. **Feature Extraction**: 107 PyRadiomics features reported using IBSI terminology
 8. **Output**: Results saved to CSV
 
 ---

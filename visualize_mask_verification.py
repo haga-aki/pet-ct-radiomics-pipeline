@@ -110,7 +110,9 @@ def create_mask_verification(case_id, nifti_dir=None, seg_dir=None, output_dir=N
 
     # File paths
     ct_path = nifti_dir / f"{case_id}_CT.nii.gz"
-    pet_path = nifti_dir / f"{case_id}_PET_registered.nii.gz"
+    pet_path = nifti_dir / f"{case_id}_PET_SUV.nii.gz"
+    if not pet_path.exists():
+        pet_path = nifti_dir / f"{case_id}_PET_registered.nii.gz"
     if not pet_path.exists():
         pet_path = nifti_dir / f"{case_id}_PET.nii.gz"
 

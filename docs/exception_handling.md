@@ -1,203 +1,71 @@
 # Exception Handling Specification
 
-This document defines the pipeline's behavior for edge cases and error conditions.
-
-## Overview
-
-The pipeline is designed to handle common edge cases gracefully, ensuring consistent output across diverse datasets. All exceptions are logged and documented in the output.
-
----
+This document describes the behavior implemented in the current public
+pipeline. It intentionally reflects the code as shipped, not aspirational
+future behavior.
 
 ## ROI Size Handling
 
-### Minimum Voxel Threshold
+For PET radiomics, `minimumROISize=50` is read from [`params.yaml`](../params.yaml).
 
-| Parameter | Value | Rationale |
-|-----------|-------|-----------|
-| `minimumROISize` | 50 voxels | Below this, texture features become unreliable |
-| `minimumROIDimensions` | 2 voxels | Minimum extent in each dimension |
+Behavior:
 
-### Behavior
+- Empty masks are skipped with a warning in the console log.
+- Masks with fewer than 50 voxels are skipped with a warning in the console log.
+- Skipped organs do not produce output rows.
 
-```
-IF voxel_count < 50:
-    - Skip feature extraction for this organ
-    - Log warning: "Organ {name} has insufficient voxels ({count} < 50)"
-    - Output row contains NaN for all features
-    - "extraction_status" column = "insufficient_voxels"
-```
+Rationale:
 
-### Common Causes
+- Very small ROIs can yield unstable PET texture estimates.
+- The manuscript treats these small-ROI texture results as exploratory.
 
-- **Small organs** (e.g., adrenal glands) after resampling to PET resolution
-- **Partial FOV** where organ is cut off
-- **Segmentation failure** resulting in very small mask
+## Empty or Missing Masks
 
----
+Behavior:
 
-## Empty Mask Handling
+- If a requested organ mask file is absent, the organ is skipped.
+- If the mask exists but contains no foreground voxels, the organ is skipped.
 
-### Definition
+Common causes:
 
-An empty mask has zero foreground voxels (label = 0 everywhere).
-
-### Behavior
-
-```
-IF mask is empty (no voxels with label > 0):
-    - Skip feature extraction
-    - Log warning: "Empty mask for organ {name}"
-    - Output row contains NaN for all features
-    - "extraction_status" column = "empty_mask"
-```
-
-### Common Causes
-
-- **Organ not present** in scan FOV
-- **Segmentation failure** (model confidence too low)
-- **Wrong label ID** specified in configuration
-
----
+- Organ is outside the field of view.
+- Segmentation was not produced for that structure.
+- The organ list requests a label that is not present in the segmentation folder.
 
 ## Feature Computation Failures
 
-### Uniform Intensity
+Behavior:
 
-Some features (e.g., GLCM, entropy) cannot be computed when all voxels have identical intensity.
+- If PyRadiomics raises an exception for a given organ, the error is logged.
+- The pipeline continues to the next organ instead of aborting the case.
+- No placeholder row is emitted for the failed organ.
 
-```
-IF all voxels have same intensity:
-    - Affected features return NaN
-    - Log info: "Uniform intensity in {organ}, some features set to NaN"
-    - Other computable features are still extracted
-```
+## PET Alignment and SUV Conversion
 
-### Division by Zero / Overflow
+Behavior:
 
-```
-IF computation results in inf or NaN:
-    - Feature value = NaN
-    - Log warning with feature name and organ
-```
+- PET is resampled to CT space using the NIfTI affine transform.
+- PET is then converted to SUVbw using metadata from the original PET DICOM series.
+- If PET-to-CT resampling fails, PET extraction for that case is skipped.
+- If SUV conversion fails because required DICOM metadata are unavailable, PET extraction for that case is skipped.
 
----
+Notes:
 
-## Registration Failures
+- This is not de novo multimodal registration; it assumes integrated PET/CT data.
+- The public pipeline now mirrors the manuscript workflow: no additional spatial
+  resampling is applied inside PyRadiomics after PET has been resampled to CT space.
 
-### Detection
+## Output Behavior
 
-Registration failure is detected by:
-- Optimizer did not converge
-- Final metric value exceeds threshold
-- Transform parameters are extreme (>100mm translation)
+- The main output is `radiomics_results.csv`.
+- Duplicate rows are replaced using the key `(PatientID, Modality, Organ)`.
+- CT radiomics rows are disabled by default in `config.yaml.example`.
+- QC figures are generated separately under `visualizations/`.
 
-### Behavior
+## Logging
 
-```
-IF registration fails:
-    - Log error: "Registration failed for case {id}"
-    - Continue with unregistered images (if rigid alignment is acceptable)
-    - OR skip case entirely (configurable)
-    - "registration_status" column in output = "failed"
-```
+The pipeline currently logs to standard output.
 
----
-
-## SUV Conversion Failures
-
-### Missing DICOM Tags
-
-```
-IF required DICOM tags missing:
-    - Attempt fallback to standard formula
-    - IF still missing critical data (weight, dose):
-        - Log error: "Cannot compute SUV: missing {tag}"
-        - Output raw activity values with warning
-        - "suv_status" column = "raw_activity"
-```
-
-### Negative or Implausible Values
-
-```
-IF SUV < 0:
-    - Log warning: "Negative SUV detected, likely conversion error"
-    - Flag case for QC review
-
-IF SUV_max > 50 (configurable threshold):
-    - Log warning: "Unusually high SUV, verify conversion"
-    - Flag case for QC review
-```
-
----
-
-## Output Specification
-
-### CSV Columns for Exception Tracking
-
-| Column | Type | Values |
-|--------|------|--------|
-| `extraction_status` | string | "success", "insufficient_voxels", "empty_mask", "error" |
-| `voxel_count` | int | Number of voxels in resampled mask |
-| `suv_status` | string | "converted", "raw_activity", "error" |
-| `registration_status` | string | "success", "failed", "skipped" |
-| `warnings` | string | Semicolon-separated warning messages |
-
-### Example Output Row (Failed Case)
-
-```csv
-case_id,organ,extraction_status,voxel_count,original_firstorder_Mean,...
-0001,adrenal_gland_right,insufficient_voxels,23,NaN,...
-```
-
----
-
-## Logging Levels
-
-| Level | Use Case |
-|-------|----------|
-| INFO | Normal operation, case start/end |
-| WARNING | Recoverable issues (small ROI, high SUV) |
-| ERROR | Non-recoverable issues (missing files, crash) |
-
-### Log File Location
-
-```
-output_directory/
-├── radiomics_results.csv
-├── pipeline.log           # All messages
-└── errors.log             # ERROR level only
-```
-
----
-
-## Recommended QC Workflow
-
-1. **Check `extraction_status` column** - Filter for non-"success" rows
-2. **Review `warnings` column** - Identify potential issues
-3. **Visual inspection** - Use generated overlay images for flagged cases
-4. **Statistical outliers** - Flag values outside 3 SD from mean
-
----
-
-## Configuration Options
-
-These behaviors can be customized in `config.yaml`:
-
-```yaml
-exception_handling:
-  # Minimum voxels for feature extraction
-  min_voxel_count: 50
-
-  # Action on empty mask: "skip", "error", "nan"
-  empty_mask_action: "skip"
-
-  # Action on registration failure: "continue", "skip", "error"
-  registration_failure_action: "continue"
-
-  # SUV plausibility thresholds
-  suv_warning_max: 50
-  suv_error_if_negative: true
-
-  # Skip entire case on critical error
-  fail_fast: false
-```
+- `INFO`: normal processing messages
+- `WARNING`: recoverable issues such as empty masks or small ROIs
+- `ERROR`: case-level failures such as failed conversion or failed feature extraction

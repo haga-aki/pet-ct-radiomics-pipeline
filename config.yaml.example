@@ -117,6 +117,17 @@ output:
   include_diagnostics: false
 
 # ==============================================================================
+# RADIOMICS SETTINGS
+# ==============================================================================
+radiomics:
+  # PET radiomics uses params.yaml for manuscript-aligned PyRadiomics settings
+  params_file: params.yaml
+
+  # Disabled by default because the manuscript workflow reports PET features
+  # plus shape descriptors from CT-derived masks, not a separate CT radiomics table
+  extract_ct: false
+
+# ==============================================================================
 # VISUALIZATION SETTINGS
 # ==============================================================================
 visualization:
@@ -147,6 +158,5 @@ visualization:
 #   interpolation: Linear   # For PET resampling (order=1 in nibabel)
 
 # radiomics:
-#   bin_width: 0.25         # SUV bin width for texture features (see params.yaml)
-#   resegment_range: null   # [min, max] to exclude values outside range
-#   normalize: false        # Normalize image before extraction
+#   params_file: params.yaml
+#   extract_ct: false

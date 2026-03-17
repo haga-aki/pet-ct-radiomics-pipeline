@@ -23,6 +23,10 @@ segmentation:
 output:
   csv_file: radiomics_results.csv
   include_diagnostics: false
+
+radiomics:
+  params_file: params.yaml
+  extract_ct: false
 ```
 
 ---
@@ -31,6 +35,9 @@ output:
 
 Specify which imaging modalities to process.
 
+`CT` remains necessary for TotalSegmentator-based mask generation even when the
+reported radiomics table is PET-only.
+
 ```yaml
 modalities:
   - CT    # Computed Tomography
@@ -38,6 +45,23 @@ modalities:
   # - MR  # Magnetic Resonance (requires total_mr task)
   # - SPECT  # Single Photon Emission CT
 ```
+
+---
+
+## Radiomics
+
+These options control manuscript-aligned feature extraction.
+
+```yaml
+radiomics:
+  params_file: params.yaml
+  extract_ct: false
+```
+
+- `params_file`: PyRadiomics parameter file used for PET extraction.
+- `extract_ct`: Export separate CT radiomics rows. Disabled by default because
+  the manuscript reports PET intensity/texture features together with
+  shape descriptors from CT-derived masks.
 
 ---
 

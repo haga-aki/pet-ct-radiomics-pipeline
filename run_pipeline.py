@@ -24,6 +24,7 @@ import numpy as np
 import nibabel as nib
 import SimpleITK as sitk
 import yaml
+from suv_converter import SUVConverter
 
 try:
     import pydicom
@@ -42,6 +43,10 @@ except ImportError:
 
 def load_config(config_path="config.yaml"):
     """Load configuration from YAML file"""
+    config_path = Path(config_path)
+    if not config_path.is_absolute():
+        config_path = get_root_dir() / config_path
+
     default_config = {
         'organs': [
             'liver',
@@ -52,6 +57,10 @@ def load_config(config_path="config.yaml"):
             'vertebrae_L1'
         ],
         'modalities': ['CT', 'PET'],
+        'radiomics': {
+            'params_file': 'params.yaml',
+            'extract_ct': False
+        },
         'segmentation': {
             'tasks': {'CT': 'total', 'MR': 'total_mr', 'PET': 'use_ct_mask', 'SPECT': 'use_ct_mask'},
             'fast': True
@@ -63,7 +72,7 @@ def load_config(config_path="config.yaml"):
             'min_pet_slices': 50,  # Minimum PET slice count
         }
     }
-    if Path(config_path).exists():
+    if config_path.exists():
         with open(config_path, 'r') as f:
             user_config = yaml.safe_load(f)
             if user_config:
@@ -87,11 +96,81 @@ DICOM_DIR = ROOT_DIR / "raw_download"
 NIFTI_DIR = ROOT_DIR / "nifti_images"
 SEG_DIR = ROOT_DIR / "segmentations"
 CONFIG = load_config()
-RESULT_CSV = CONFIG['output']['csv_file']
-ID_MAP_FILE = Path("id_mapping.csv")
+RESULT_CSV = ROOT_DIR / CONFIG['output']['csv_file']
+ID_MAP_FILE = ROOT_DIR / "id_mapping.csv"
 
 for p in [NIFTI_DIR, SEG_DIR]:
     p.mkdir(parents=True, exist_ok=True)
+
+
+def get_radiomics_params_path(config):
+    """Resolve the PyRadiomics parameter file path."""
+    params_file = config.get('radiomics', {}).get('params_file')
+    if not params_file:
+        return None
+
+    params_path = Path(params_file)
+    if not params_path.is_absolute():
+        params_path = ROOT_DIR / params_path
+    return params_path
+
+
+def load_radiomics_params(config):
+    """Load the PyRadiomics parameter file."""
+    params_path = get_radiomics_params_path(config)
+    if not params_path or not params_path.exists():
+        return {}
+
+    with open(params_path, 'r', encoding='utf-8') as f:
+        return yaml.safe_load(f) or {}
+
+
+def create_radiomics_extractor(modality, config):
+    """Create a radiomics extractor aligned with the paper settings."""
+    if modality in ['PET', 'PT', 'SPECT']:
+        params_path = get_radiomics_params_path(config)
+        if params_path and params_path.exists():
+            return featureextractor.RadiomicsFeatureExtractor(str(params_path))
+    return featureextractor.RadiomicsFeatureExtractor()
+
+
+def get_minimum_roi_size(config, modality):
+    """Return the minimum ROI size threshold for extraction."""
+    if modality not in ['PET', 'PT', 'SPECT']:
+        return 0
+
+    params = load_radiomics_params(config)
+    setting = params.get('setting', {})
+    value = setting.get('minimumROISize', 0)
+    return int(value or 0)
+
+
+def count_mask_voxels(mask_path):
+    """Count foreground voxels in a binary mask."""
+    mask_data = nib.load(str(mask_path)).get_fdata()
+    return int(np.count_nonzero(mask_data > 0))
+
+
+def should_extract_ct_radiomics(config):
+    """Whether CT radiomics rows should be exported."""
+    return bool(config.get('radiomics', {}).get('extract_ct', False))
+
+
+def convert_pet_to_suv(image_path, dicom_path, output_path):
+    """Convert a PET NIfTI image to SUVbw using PET DICOM metadata."""
+    try:
+        log_progress("  Converting PET image to SUVbw...", "INFO")
+        converter = SUVConverter(dicom_path)
+        pet_img = nib.load(str(image_path))
+        suv_data = converter.convert_to_suv(pet_img.get_fdata())
+
+        suv_img = nib.Nifti1Image(suv_data.astype(np.float32), pet_img.affine, pet_img.header)
+        nib.save(suv_img, str(output_path))
+        log_progress(f"  PET SUV image saved: {output_path}", "INFO")
+        return True
+    except Exception as e:
+        log_progress(f"  PET SUV conversion error: {e}", "ERROR")
+        return False
 
 
 def check_gpu_memory():
@@ -609,15 +688,14 @@ def step3_radiomics(nifti_path, seg_folder, anon_id, modality):
     """Feature extraction using PyRadiomics."""
     organs = CONFIG['organs']
     include_diag = CONFIG['output'].get('include_diagnostics', False)
+    min_roi_size = get_minimum_roi_size(CONFIG, modality)
 
     if 'all' in organs:
         files = list(seg_folder.glob("*.nii.gz"))
         organs = [p.stem.replace('.nii', '') for p in files if 'combined_' not in p.name]
 
-    needs_resampling = modality in ['PET', 'PT', 'SPECT']
-
     log_progress(f"{modality}: Extracting radiomics features for {len(organs)} organs...", "INFO")
-    extractor = featureextractor.RadiomicsFeatureExtractor()
+    extractor = create_radiomics_extractor(modality, CONFIG)
     features_list = []
 
     for idx, organ in enumerate(organs, 1):
@@ -625,21 +703,19 @@ def step3_radiomics(nifti_path, seg_folder, anon_id, modality):
         if not mask_path.exists():
             continue
         try:
-            if needs_resampling:
-                resampled_dir = seg_folder.parent / f"{anon_id}_{modality}_resampled"
-                resampled_dir.mkdir(parents=True, exist_ok=True)
-                resampled_mask_path = resampled_dir / f"{organ}.nii.gz"
+            voxel_count = count_mask_voxels(mask_path)
+            if voxel_count == 0:
+                log_progress(f"    [{idx}/{len(organs)}] Empty mask skipped: {organ}", "WARNING")
+                continue
+            if min_roi_size and voxel_count < min_roi_size:
+                log_progress(
+                    f"    [{idx}/{len(organs)}] Small ROI skipped: {organ} "
+                    f"({voxel_count} < {min_roi_size} voxels)",
+                    "WARNING"
+                )
+                continue
 
-                if not resampled_mask_path.exists():
-                    print(f"    - Resampling {organ} mask to {modality} space...")
-                    if not resample_mask_to_image(mask_path, nifti_path, resampled_mask_path):
-                        continue
-
-                mask_path_to_use = str(resampled_mask_path)
-            else:
-                mask_path_to_use = str(mask_path)
-
-            result = extractor.execute(str(nifti_path), mask_path_to_use)
+            result = extractor.execute(str(nifti_path), str(mask_path))
             row = {"PatientID": anon_id, "Modality": modality, "Organ": organ}
             for k, v in result.items():
                 if "original_" in k:
@@ -784,6 +860,10 @@ Examples:
 
     args = parser.parse_args()
 
+    CONFIG = load_config(args.config)
+    RESULT_CSV = ROOT_DIR / CONFIG['output']['csv_file']
+    ID_MAP_FILE = ROOT_DIR / "id_mapping.csv"
+
     # Special modes
     if args.version_report:
         print_version_report()
@@ -797,8 +877,11 @@ Examples:
     if args.input:
         DICOM_DIR = Path(args.input)
     if args.output:
-        NIFTI_DIR = Path(args.output) / "nifti_images"
-        SEG_DIR = Path(args.output) / "segmentations"
+        output_root = Path(args.output)
+        NIFTI_DIR = output_root / "nifti_images"
+        SEG_DIR = output_root / "segmentations"
+        RESULT_CSV = output_root / CONFIG['output']['csv_file']
+        ID_MAP_FILE = output_root / "id_mapping.csv"
         NIFTI_DIR.mkdir(parents=True, exist_ok=True)
         SEG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -843,7 +926,7 @@ Examples:
             ct_nifti = step1_convert_dicom(modality_paths['CT'], anon_id, 'CT')
             if ct_nifti:
                 ct_seg_dir = step2_segmentation(ct_nifti, anon_id, 'CT', use_gpu=use_gpu)
-                if ct_seg_dir:
+                if ct_seg_dir and should_extract_ct_radiomics(CONFIG):
                     feats = step3_radiomics(ct_nifti, ct_seg_dir, anon_id, 'CT')
                     all_results.extend(feats)
 
@@ -865,9 +948,22 @@ Examples:
                         nifti = resampled_path
                     else:
                         log_progress(f"  Warning: Could not resample {modality} to CT space", "WARNING")
+                        continue
                 else:
                     log_progress(f"  {modality} registered file exists: {resampled_path.name}", "INFO")
                     nifti = resampled_path
+
+            if modality in ['PET', 'PT', 'SPECT']:
+                suv_path = NIFTI_DIR / f"{anon_id}_{modality}_SUV.nii.gz"
+                if not suv_path.exists():
+                    if convert_pet_to_suv(nifti, dicom_path, suv_path):
+                        nifti = suv_path
+                    else:
+                        log_progress(f"  Warning: Could not convert {modality} to SUVbw", "WARNING")
+                        continue
+                else:
+                    log_progress(f"  {modality} SUV image exists: {suv_path.name}", "INFO")
+                    nifti = suv_path
 
             seg_dir = step2_segmentation(nifti, anon_id, modality, ct_seg_dir, use_gpu=use_gpu)
             if not seg_dir:

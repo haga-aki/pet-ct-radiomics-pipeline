@@ -1,247 +1,283 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
-PET/CT Radiomics Pipeline - SUV Conversion and Feature Extraction
+Compatibility utility for manuscript-aligned PET SUV feature extraction.
 
-Creates SUV-corrected PET images and extracts radiomic features using
-vendor-neutral SUV conversion. Processes all patients in segmentations/.
+This script rebuilds PET SUV images and PET radiomics rows from existing
+pipeline outputs. It is intended for compatibility with older workflows;
+`run_pipeline.py` already performs the same SUV conversion and extraction.
 """
+
+import argparse
+import csv
 import os
+from pathlib import Path
+
 import nibabel as nib
 import numpy as np
 import pandas as pd
-from pathlib import Path
-from radiomics import featureextractor
+import pydicom
 import yaml
+from radiomics import featureextractor
 
 from suv_converter import SUVConverter
 
-# Base directory - defaults to script location, can be overridden by environment variable
-BASE_DIR = Path(os.environ.get("PET_PIPELINE_ROOT", Path(__file__).parent))
-DICOM_DIR = BASE_DIR / "raw_download"
-NIFTI_DIR = BASE_DIR / "nifti_images"
-SEG_DIR = BASE_DIR / "segmentations"
+
+BASE_DIR = Path(os.environ.get("PET_PIPELINE_ROOT", Path(__file__).parent)).resolve()
 
 
 def load_config(config_path=None):
-    """Load configuration from config.yaml"""
+    """Load configuration with manuscript-aligned defaults."""
+    default_config = {
+        'organs': [
+            'liver',
+            'spleen',
+            'kidney_left',
+            'kidney_right',
+            'adrenal_gland_left',
+            'adrenal_gland_right',
+            'aorta',
+            'vertebrae_L1',
+        ],
+        'radiomics': {
+            'params_file': 'params.yaml',
+            'extract_ct': False,
+        },
+        'output': {
+            'csv_file': 'radiomics_results.csv',
+        },
+    }
+
     if config_path is None:
         config_path = BASE_DIR / "config.yaml"
+    else:
+        config_path = Path(config_path)
 
-    # Default organs (representative 8-organ set)
-    default_organs = [
-        "liver",
-        "spleen",
-        "kidney_left",
-        "kidney_right",
-        "adrenal_gland_left",
-        "adrenal_gland_right",
-        "aorta",
-        "vertebrae_L1",
-    ]
+    if config_path.exists():
+        with open(config_path, 'r', encoding='utf-8') as f:
+            user_config = yaml.safe_load(f) or {}
+        for key, value in user_config.items():
+            if isinstance(value, dict):
+                default_config.setdefault(key, {}).update(value)
+            else:
+                default_config[key] = value
 
-    if Path(config_path).exists():
-        with open(config_path, 'r') as f:
-            config = yaml.safe_load(f)
-            if config and 'organs' in config:
-                return config['organs']
-
-    return default_organs
+    return default_config
 
 
-# Load organs from config
-ORGANS = load_config()
+def get_output_root(output_dir=None):
+    """Resolve output root."""
+    return Path(output_dir).resolve() if output_dir else BASE_DIR
 
 
-def get_patient_ids():
-    """Get list of patient IDs from segmentations folder"""
-    if not SEG_DIR.exists():
+def get_params_path(config):
+    """Resolve params.yaml path."""
+    params_path = Path(config.get('radiomics', {}).get('params_file', 'params.yaml'))
+    if not params_path.is_absolute():
+        params_path = BASE_DIR / params_path
+    return params_path
+
+
+def create_pet_extractor(config):
+    """Create the PET extractor using params.yaml."""
+    params_path = get_params_path(config)
+    if not params_path.exists():
+        raise FileNotFoundError(f"PyRadiomics parameter file not found: {params_path}")
+    return featureextractor.RadiomicsFeatureExtractor(str(params_path))
+
+
+def get_minimum_roi_size(config):
+    """Read minimum ROI size from params.yaml."""
+    params_path = get_params_path(config)
+    with open(params_path, 'r', encoding='utf-8') as f:
+        params = yaml.safe_load(f) or {}
+    return int((params.get('setting', {}) or {}).get('minimumROISize', 0) or 0)
+
+
+def count_mask_voxels(mask_path):
+    """Count foreground voxels."""
+    return int(np.count_nonzero(nib.load(str(mask_path)).get_fdata() > 0))
+
+
+def get_case_ids(seg_root):
+    """Return anonymized case IDs from segmentation output."""
+    if not seg_root.exists():
         return []
-    return [p.name for p in SEG_DIR.iterdir() if p.is_dir()]
+
+    case_ids = set()
+    for folder in seg_root.iterdir():
+        if not folder.is_dir():
+            continue
+        if folder.name.endswith("_CT"):
+            case_ids.add(folder.name[:-3])
+        else:
+            case_ids.add(folder.name)
+    return sorted(case_ids)
 
 
-def find_pet_dicom_folder(patient_id):
-    """Find the PET DICOM folder for a patient"""
-    patient_dicom_dir = DICOM_DIR / patient_id
-    if not patient_dicom_dir.exists():
+def load_reverse_id_mapping(output_root):
+    """Map anonymized IDs back to original source folder names."""
+    mapping_file = output_root / "id_mapping.csv"
+    reverse_mapping = {}
+    if not mapping_file.exists():
+        return reverse_mapping
+
+    with open(mapping_file, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            original = row.get("Original_Folder_Name")
+            anon = row.get("Anonymized_ID")
+            if original and anon:
+                reverse_mapping[anon] = original
+    return reverse_mapping
+
+
+def find_pet_dicom_folder(source_root, original_folder_name):
+    """Find the PET/PT DICOM series for the source folder."""
+    patient_dir = source_root / original_folder_name
+    if not patient_dir.exists():
         return None
 
-    import pydicom
-    for subdir in patient_dicom_dir.iterdir():
-        if subdir.is_dir():
-            for f in list(subdir.iterdir())[:3]:
-                if f.is_file():
-                    try:
-                        ds = pydicom.dcmread(str(f), stop_before_pixels=True)
-                        if getattr(ds, 'Modality', '').upper() == 'PT':
-                            return subdir
-                    except:
-                        continue
+    candidate_dirs = [patient_dir] + [p for p in patient_dir.iterdir() if p.is_dir()]
+    for directory in candidate_dirs:
+        for file_path in directory.iterdir():
+            if not file_path.is_file() or file_path.name.startswith('.'):
+                continue
+            try:
+                ds = pydicom.dcmread(str(file_path), stop_before_pixels=True)
+                if getattr(ds, 'Modality', '').upper() in {'PT', 'PET'}:
+                    return directory
+            except Exception:
+                continue
     return None
 
 
-def process_patient(patient_id, extractor):
-    """Process SUV conversion and radiomics extraction for one patient"""
-    print(f"\n{'='*60}")
-    print(f"Processing: {patient_id}")
-    print(f"{'='*60}")
+def ensure_pet_suv(case_id, pet_dicom_dir, nifti_root):
+    """Create SUV image from the registered PET image if needed."""
+    suv_path = nifti_root / f"{case_id}_PET_SUV.nii.gz"
+    if suv_path.exists():
+        return suv_path
 
-    results = []
+    source_candidates = [
+        nifti_root / f"{case_id}_PET_registered.nii.gz",
+        nifti_root / f"{case_id}_PET.nii.gz",
+    ]
+    source_path = next((path for path in source_candidates if path.exists()), None)
+    if source_path is None:
+        raise FileNotFoundError(f"No PET NIfTI found for {case_id}")
 
-    # Path configuration
-    pet_reg_path = NIFTI_DIR / f"{patient_id}_PET_registered.nii.gz"
-    suv_output_path = NIFTI_DIR / f"{patient_id}_PET_SUV.nii.gz"
-    ct_path = NIFTI_DIR / f"{patient_id}_CT.nii.gz"
-    seg_dir = SEG_DIR / patient_id
+    converter = SUVConverter(pet_dicom_dir)
+    pet_img = nib.load(str(source_path))
+    suv_data = converter.convert_to_suv(pet_img.get_fdata())
+    suv_img = nib.Nifti1Image(suv_data.astype(np.float32), pet_img.affine, pet_img.header)
+    nib.save(suv_img, str(suv_path))
+    return suv_path
 
-    # Try with _CT suffix if segmentation directory not found
-    if not seg_dir.exists():
-        seg_dir = SEG_DIR / f"{patient_id}_CT"
 
-    if not seg_dir.exists():
-        print(f"  Segmentation directory not found for {patient_id}")
-        return results
-
-    # Check if PET image exists
-    if not pet_reg_path.exists():
-        print(f"  PET registered image not found: {pet_reg_path.name}")
-        # CT only case: extract CT Radiomics only
-        if ct_path.exists():
-            print("  Processing CT only...")
-            for organ in ORGANS:
-                mask_path = seg_dir / f"{organ}.nii.gz"
-                if mask_path.exists():
-                    try:
-                        result = extractor.execute(str(ct_path), str(mask_path))
-                        row = {"PatientID": patient_id, "Modality": "CT", "Organ": organ}
-                        for k, v in result.items():
-                            if k.startswith("original_"):
-                                row[k] = v
-                        results.append(row)
-                    except Exception as e:
-                        print(f"    {organ}: ERROR - {e}")
-        return results
-
-    # 1. Create SUV image (auto-detect vendor)
-    print("\n[1. SUV Image Creation]")
-
-    pet_dicom_dir = find_pet_dicom_folder(patient_id)
-    if pet_dicom_dir:
-        try:
-            converter = SUVConverter(pet_dicom_dir)
-            converter.print_info()
-
-            img = nib.load(pet_reg_path)
-            data = img.get_fdata()
-            suv_data = converter.convert_to_suv(data)
-
-            print(f"  Converted: max={suv_data.max():.2f} (SUVbw)")
-
-            suv_img = nib.Nifti1Image(suv_data.astype(np.float32), img.affine, img.header)
-            nib.save(suv_img, suv_output_path)
-            print(f"  Saved: {suv_output_path.name}")
-        except Exception as e:
-            print(f"  SUV conversion error: {e}")
-            return results
-    else:
-        print(f"  PET DICOM folder not found")
-        return results
-
-    # 2. Radiomics extraction
-    print("\n[2. Radiomics Extraction]")
-
-    # CT Radiomics
-    if ct_path.exists():
-        print("\n  CT Radiomics...")
-        for organ in ORGANS:
-            mask_path = seg_dir / f"{organ}.nii.gz"
-            if mask_path.exists():
-                try:
-                    result = extractor.execute(str(ct_path), str(mask_path))
-                    row = {"PatientID": patient_id, "Modality": "CT", "Organ": organ}
-                    for k, v in result.items():
-                        if k.startswith("original_"):
-                            row[k] = v
-                    results.append(row)
-                    print(f"    {organ}: OK")
-                except Exception as e:
-                    print(f"    {organ}: ERROR - {e}")
-
-    # PET SUV Radiomics
-    print("\n  PET SUV Radiomics...")
-    for organ in ORGANS:
+def extract_pet_features(case_id, image_path, seg_dir, organs, extractor, min_roi_size):
+    """Extract PET radiomics rows for one case."""
+    rows = []
+    for organ in organs:
         mask_path = seg_dir / f"{organ}.nii.gz"
-        if mask_path.exists():
-            try:
-                result = extractor.execute(str(suv_output_path), str(mask_path))
-                row = {"PatientID": patient_id, "Modality": "PET", "Organ": organ}
-                for k, v in result.items():
-                    if k.startswith("original_"):
-                        row[k] = v
-                results.append(row)
+        if not mask_path.exists():
+            continue
 
-                mean_suv = result.get('original_firstorder_Mean', 0)
-                max_suv = result.get('original_firstorder_Maximum', 0)
-                print(f"    {organ}: Mean={mean_suv:.3f}, Max={max_suv:.3f}")
-            except Exception as e:
-                print(f"    {organ}: ERROR - {e}")
+        voxel_count = count_mask_voxels(mask_path)
+        if voxel_count == 0 or voxel_count < min_roi_size:
+            continue
 
-    return results
+        result = extractor.execute(str(image_path), str(mask_path))
+        row = {"PatientID": case_id, "Modality": "PET", "Organ": organ}
+        for key, value in result.items():
+            if key.startswith("original_"):
+                row[key] = value
+        rows.append(row)
+    return rows
+
+
+def merge_results(output_csv, new_rows):
+    """Merge refreshed PET rows into the output CSV."""
+    df_new = pd.DataFrame(new_rows)
+    if df_new.empty:
+        return df_new
+
+    if output_csv.exists():
+        df_existing = pd.read_csv(output_csv)
+        key_cols = ['PatientID', 'Modality', 'Organ']
+        existing_keys = set(tuple(row) for row in df_new[key_cols].itertuples(index=False, name=None))
+        keep_mask = [
+            tuple(row) not in existing_keys
+            for row in df_existing[key_cols].itertuples(index=False, name=None)
+        ]
+        df_existing = df_existing.loc[keep_mask]
+        df_final = pd.concat([df_existing, df_new], ignore_index=True)
+    else:
+        df_final = df_new
+
+    df_final.to_csv(output_csv, index=False)
+    return df_final
 
 
 def main():
-    print("=" * 70)
-    print("PET/CT Radiomics - SUV Conversion and Feature Extraction")
-    print("=" * 70)
-    print(f"Target organs ({len(ORGANS)}): {ORGANS}")
+    parser = argparse.ArgumentParser(
+        description="Rebuild PET SUV images and PET radiomics rows from existing outputs."
+    )
+    parser.add_argument("--config", type=str, default=str(BASE_DIR / "config.yaml"),
+                        help="Configuration file path")
+    parser.add_argument("--output", type=str, default=None,
+                        help="Output root (defaults to repository root)")
+    args = parser.parse_args()
 
-    # Get patient list
-    patient_ids = get_patient_ids()
-    if not patient_ids:
-        print("No patients found in segmentations folder")
+    config = load_config(args.config)
+    output_root = get_output_root(args.output)
+    source_root = BASE_DIR / "raw_download"
+    nifti_root = output_root / "nifti_images"
+    seg_root = output_root / "segmentations"
+    output_csv = output_root / config['output']['csv_file']
+
+    case_ids = get_case_ids(seg_root)
+    if not case_ids:
+        print("No segmentation outputs found.")
         return
 
-    print(f"\nPatients to process: {len(patient_ids)}")
-    for pid in patient_ids:
-        print(f"  - {pid}")
+    reverse_mapping = load_reverse_id_mapping(output_root)
+    extractor = create_pet_extractor(config)
+    min_roi_size = get_minimum_roi_size(config)
+    organs = config['organs']
 
-    # Radiomics extractor
-    extractor = featureextractor.RadiomicsFeatureExtractor()
+    all_rows = []
+    for case_id in case_ids:
+        original_folder = reverse_mapping.get(case_id)
+        if not original_folder:
+            print(f"Skipping {case_id}: missing reverse ID mapping")
+            continue
 
-    # Process all patients
-    all_results = []
-    for patient_id in sorted(patient_ids):
-        results = process_patient(patient_id, extractor)
-        all_results.extend(results)
+        pet_dicom_dir = find_pet_dicom_folder(source_root, original_folder)
+        if pet_dicom_dir is None:
+            print(f"Skipping {case_id}: PET DICOM folder not found")
+            continue
 
-    # Save results
-    if all_results:
-        df = pd.DataFrame(all_results)
-        output_csv = BASE_DIR / "pet_ct_radiomics_results.csv"
-        df.to_csv(output_csv, index=False)
-        print(f"\n{'='*70}")
-        print(f"Saved: {output_csv}")
-        print(f"Total records: {len(df)}")
+        seg_dir = seg_root / f"{case_id}_CT"
+        if not seg_dir.exists():
+            seg_dir = seg_root / case_id
+        if not seg_dir.exists():
+            print(f"Skipping {case_id}: segmentation directory not found")
+            continue
 
-        # Summary display
-        print(f"\n{'='*70}")
-        print("PET SUV Radiomics Summary")
-        print(f"{'='*70}")
+        try:
+            suv_path = ensure_pet_suv(case_id, pet_dicom_dir, nifti_root)
+            rows = extract_pet_features(case_id, suv_path, seg_dir, organs, extractor, min_roi_size)
+            all_rows.extend(rows)
+            print(f"{case_id}: extracted {len(rows)} PET rows")
+        except Exception as e:
+            print(f"{case_id}: ERROR - {e}")
 
-        df_pet = df[df['Modality'] == 'PET']
-        for patient_id in df_pet['PatientID'].unique():
-            print(f"\n[{patient_id}]")
-            print(f"{'Organ':<25} {'Mean SUV':>10} {'Max SUV':>10} {'Std SUV':>10}")
-            print("-" * 60)
+    if not all_rows:
+        print("No PET rows were generated.")
+        return
 
-            df_patient = df_pet[df_pet['PatientID'] == patient_id]
-            for _, row in df_patient.iterrows():
-                organ = row['Organ']
-                mean_suv = row['original_firstorder_Mean']
-                max_suv = row['original_firstorder_Maximum']
-                std_suv = np.sqrt(row['original_firstorder_Variance'])
-                print(f"{organ:<25} {mean_suv:>10.3f} {max_suv:>10.3f} {std_suv:>10.3f}")
-
-    print("\nDone!")
+    df_final = merge_results(output_csv, all_rows)
+    print(f"Saved: {output_csv}")
+    print(f"Rows: {len(df_final)}")
 
 
 if __name__ == "__main__":

@@ -30,9 +30,9 @@ setting:
   # =========================================================================
   # RESAMPLING SETTINGS
   # =========================================================================
-  # No resampling - use native PET resolution
-  # For PET, typical voxel size is 4x4x4 mm
-  # Resampling disabled to preserve original SUV values
+  # No additional PyRadiomics resampling.
+  # The manuscript workflow first resamples PET to CT space, then extracts
+  # radiomics from the resampled SUV image without a second resampling step.
   resampledPixelSpacing: null  # null = no resampling
   interpolator: 'sitkBSpline'  # Used only if resampling enabled
   padDistance: 5

@@ -1,6 +1,6 @@
 # Radiomics Feature List
 
-This document describes the 107 IBSI-compliant radiomic features extracted by PyRadiomics.
+This document describes the 107 PyRadiomics features reported using IBSI terminology.
 
 ## Feature Categories
 
